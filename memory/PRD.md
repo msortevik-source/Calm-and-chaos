@@ -1,31 +1,35 @@
 # Calm & Chaos — PRD
 
 ## Original problem statement
-A familiar home for an overwhelmed but clever adult goblin. Emotional sequence: greeted → grounded → able to think. Feels like entering a familiar room. Low friction to thought. ONE main conversational engine connected to brain dumps, training, calendar, budget, food, patterns. Aesthetic: rainy Bergen forest + coffee + nervous system exhale.
+A familiar home for an overwhelmed but clever adult goblin. Emotional sequence: greeted → grounded → able to think. Feels like entering a familiar room. Low friction to thought. ONE main conversational engine connected to brain dumps, training, calendar, budget, food, patterns.
 
 ## Architecture
-- React (CRA + craco) + Tailwind + Spectral/Manrope fonts
+- React (CRA + craco) + Tailwind + Spectral/Manrope
 - FastAPI + MongoDB (Motor)
-- LLM: gpt-5.2 via Emergent universal key + emergentintegrations
-- Google Calendar OAuth (single-user, working)
-- Notion source-of-truth (read via "Calm and chaos reader" integration token)
+- LLM: gpt-5.2 via Emergent universal key + emergentintegrations — ONE API call per user message (single-call architecture)
+- Google Calendar OAuth read-only (single-user, working)
+- Notion source-of-truth (read via integration token "Calm and chaos reader")
+- PWA-ready (manifest.json + apple-touch-icon + standalone display)
 
 ## Personas
-- Em — single user. No auth. The familiar room.
+- Em — single user. No auth.
 
 ## Implemented
-- 2026-05-21 v1: Home + Conversation + Brain dump + Training + Patterns + Google Calendar
-- 2026-05-21 v1.1: Tone Constitution embedded; warmer palette; expanded schemas (BrainDump+Training); Budget & Food section; expanded Patterns
-- 2026-05-21 v1.2:
-  - **Data-aware conversation** — chat endpoint detects keywords (training/run/strength/brain dump/budget/spending/food/meals/week/month/look at my/...) and injects last-30-day summary into the goblin's system prompt. Verified: goblin now cites exact distances, weights, moods, tags, dates, wins of the day.
-  - **Sunday letter from the room** — `/api/letter/current` generates GPT-5.2 weekly summary (cached by ISO week, force=true to regenerate). Letter page renders markdown bullets/bold; home page shows preview card. Voice is unmistakably goblin ("you act like a functional mammal", "your nervous system likes showing up more than thinking about showing up").
-- Backend tests: 33/33 across iterations 1+2+3
+- v1 (2026-05-21): Home + Conversation + Brain dump + Training + Patterns + Google Calendar
+- v1.1: Tone Constitution embedded; warmer palette; expanded BrainDump+Training schemas; Budget & Food; expanded Patterns
+- v1.2: Data-aware conversation; Sunday letter from the room (cached per ISO week)
+- v1.3 (2026-05-21):
+  - **Single-call chat architecture** — history baked into composed user message, 1 LLM call per request (was 10). Latency 1.6–6.6s (was 10–20s). Cost ~$4–5/mo at heavy daily use (was ~$23/mo).
+  - **Word-boundary regex** on context-keywords (e.g. "weekend" no longer triggers "week" data injection).
+  - **Shared markdown renderer** (`/app/frontend/src/lib/markdown.jsx`) — bold/italic/inline-code in conversation, snapshots, letter.
+  - **PWA-ready**: manifest.json, apple-touch-icon (180/192/512), theme-color, standalone display, safe-area-inset padding.
+- Backend tests: 38/38 passing
 
 ## Backlog
 - P1: One-tap "discuss this with the goblin" from any entry
-- P1: Evening "before bed" check-in (optional, one quiet question)
-- P2: Auto-stale letter cache after N hours (counts drift during the week)
-- P2: Word-boundary regex on TIME_BROAD context-keywords (avoid 'weekend' triggering 'week')
-- P2: Tighter Pydantic Literal validation; 404 on delete-miss
+- P1: Optional evening "before bed" check-in question
+- P2: Total composed-prompt token cap; orphan user_msg cleanup on 502
+- P2: Auto-stale letter cache after N hours
 - P2: Letter regen for specific past weeks (?week_key param)
-- Parking lot (per Em's Notion): Garmin/Strava auto-import, voice input, ambient goblin movement
+- P2: Custom domain after deploy
+- Parking lot: Garmin/Strava auto-import, voice input, ambient goblin movement
