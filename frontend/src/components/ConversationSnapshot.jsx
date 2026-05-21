@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { MessageCircle } from "lucide-react";
 import { Link } from "react-router-dom";
 import { getChatRecent } from "../lib/api";
+import { renderInline } from "../lib/markdown";
 
 export default function ConversationSnapshot({ refreshKey }) {
   const [messages, setMessages] = useState([]);
@@ -38,7 +39,7 @@ export default function ConversationSnapshot({ refreshKey }) {
               {m.role === "user" ? "you" : "the goblin"}
             </div>
             <p className={`font-body text-sm leading-relaxed ${m.role === "assistant" ? "text-moss-50 font-heading italic" : "text-moss-100"}`}>
-              {m.text}
+              {renderInline(m.text)}
             </p>
           </div>
         ))}

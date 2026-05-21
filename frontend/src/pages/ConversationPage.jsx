@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import ChatInput from "../components/ChatInput";
 import { getChatHistory, sendChat, clearChat } from "../lib/api";
+import { renderInline } from "../lib/markdown";
 import { Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -65,7 +66,7 @@ export default function ConversationPage() {
               {m.role === "user" ? `you${m.mode && m.mode !== "send" ? ` · ${m.mode.replace("_", " ")}` : ""}` : "the goblin"}
             </div>
             <p className={`font-body whitespace-pre-wrap leading-relaxed ${m.role === "assistant" ? "text-moss-50 font-heading italic text-lg" : "text-moss-100"}`}>
-              {m.text}
+              {renderInline(m.text)}
             </p>
           </div>
         ))}

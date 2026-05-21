@@ -1,0 +1,31 @@
+{
+  "name": "Calm & Chaos",
+  "short_name": "Calm & Chaos",
+  "description": "A familiar room for an overwhelmed but clever adult goblin.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#1A1C19",
+  "theme_color": "#1A1C19",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/apple-touch-icon.png",
+      "type": "image/png",
+      "sizes": "180x180"
+    }
+  ],
+  "categories": ["lifestyle", "productivity"]
+}

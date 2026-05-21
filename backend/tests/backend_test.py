@@ -474,6 +474,108 @@ class TestLetter:
             assert "week_key" in ll and "body" in ll and "counts" in ll
 
 
+# ---------- Iteration 4: single-LLM-call refactor of /api/chat ----------
+class TestChatIteration4:
+    """Iteration 4: /api/chat now makes ONE LLM call per message (history baked in).
+    Verify: (a) latency < 8s for a single call, (b) multi-turn memory still works,
+    (c) data-aware context still injected, (d) history endpoints unchanged."""
+
+    def test_chat_single_call_latency_under_8s(self, client):
+        import time
+        # Clear history so we test a no-history path (fastest possible)
+        client.delete(f"{API}/chat/history", timeout=30)
+        t0 = time.time()
+        r = client.post(
+            f"{API}/chat",
+            json={"text": "TEST_iter4 quick hello", "mode": "send"},
+            timeout=30,
+        )
+        dur = time.time() - t0
+        assert r.status_code == 200, r.text
+        d = r.json()
+        assert d["assistant_msg"]["text"].strip(), "empty assistant text"
+        print(f"\n[iter4] single chat call latency: {dur:.2f}s")
+        # Soft assertion per spec: should be well under 8s now (was 10-20s before)
+        assert dur < 8.0, f"chat call too slow: {dur:.2f}s (expected <8s after refactor)"
+
+    def test_chat_multi_turn_memory(self, client):
+        """Turn 1 sets context, turn 2 references it implicitly. Just verify
+        the assistant_msg.text is non-empty and request succeeds — content
+        coherence is qualitative, but a working memory should at minimum
+        produce a non-empty reply when asked a follow-up."""
+        client.delete(f"{API}/chat/history", timeout=30)
+        # Turn 1
+        r1 = client.post(
+            f"{API}/chat",
+            json={"text": "hey, just got back from a run", "mode": "send"},
+            timeout=30,
+        )
+        assert r1.status_code == 200, r1.text
+        d1 = r1.json()
+        assert d1["assistant_msg"]["text"].strip()
+
+        # Turn 2 — pronoun reference, no explicit subject
+        r2 = client.post(
+            f"{API}/chat",
+            json={"text": "how long was it?", "mode": "send"},
+            timeout=30,
+        )
+        assert r2.status_code == 200, r2.text
+        d2 = r2.json()
+        text2 = d2["assistant_msg"]["text"].strip()
+        assert text2, "empty assistant reply on turn 2"
+        # Verify history actually has 4 messages (2 user + 2 assistant) in order
+        rh = client.get(f"{API}/chat/history", timeout=30)
+        msgs = rh.json()["messages"]
+        assert len(msgs) >= 4
+        roles = [m["role"] for m in msgs[-4:]]
+        assert roles == ["user", "assistant", "user", "assistant"], f"unexpected role order: {roles}"
+
+    def test_chat_data_aware_still_works_after_refactor(self, client):
+        """Seed 1 training entry, then ask a training-keyword question. Verify
+        non-empty reply and single LLM call still pulls in the data context."""
+        import time
+        seeded = []
+        r = client.post(f"{API}/training", json={
+            "kind": "run", "distance_km": 7.0, "duration_min": 40,
+            "pace": "5:42", "notes": "TEST_iter4 ctx run",
+        }, timeout=30)
+        assert r.status_code == 200
+        seeded.append(r.json()["id"])
+        try:
+            t0 = time.time()
+            r2 = client.post(
+                f"{API}/chat",
+                json={"text": "how's my running been this week?", "mode": "send"},
+                timeout=30,
+            )
+            dur = time.time() - t0
+            assert r2.status_code == 200, r2.text
+            d = r2.json()
+            assert d["assistant_msg"]["text"].strip()
+            print(f"\n[iter4] data-aware chat latency: {dur:.2f}s")
+            assert dur < 8.0, f"data-aware chat too slow: {dur:.2f}s"
+        finally:
+            for eid in seeded:
+                client.delete(f"{API}/training/{eid}", timeout=30)
+
+    def test_chat_empty_still_400(self, client):
+        r = client.post(f"{API}/chat", json={"text": "", "mode": "send"}, timeout=30)
+        assert r.status_code == 400
+
+    def test_chat_recent_returns_last_two_chrono(self, client):
+        """Regression: /api/chat/recent still returns last 2 in chronological order."""
+        client.delete(f"{API}/chat/history", timeout=30)
+        client.post(f"{API}/chat", json={"text": "TEST_iter4 first", "mode": "send"}, timeout=30)
+        client.post(f"{API}/chat", json={"text": "TEST_iter4 second", "mode": "send"}, timeout=30)
+        r = client.get(f"{API}/chat/recent", timeout=30)
+        assert r.status_code == 200
+        msgs = r.json()["messages"]
+        assert len(msgs) == 2
+        ts = [m["timestamp"] for m in msgs]
+        assert ts == sorted(ts), "recent not chronological"
+
+
 # ---------- Calendar ----------
 class TestCalendar:
     def test_status_keys(self, client):

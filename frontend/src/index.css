@@ -8,6 +8,14 @@ html, body, #root {
   height: 100%;
 }
 
+/* Respect iOS safe-area when installed as PWA */
+@supports (padding: max(0px)) {
+  body {
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+}
+
 body {
   margin: 0;
   /* Warmer base — soft black with subtle moss undertone, not void */

@@ -377,6 +377,29 @@ async def get_greeting():
     pair = random.choice(GREETINGS[tod])
     return GreetingResponse(greeting=pair[0], sub=pair[1], time_of_day=tod)
 
+def _format_user_message_with_history(history, current_text: str) -> str:
+    """
+    Build a single user-message string that includes recent conversation as memory,
+    so the LLM only needs one API call instead of replaying every turn.
+    history is a list of {role, text} dicts in chronological (oldest first) order.
+    """
+    if not history:
+        return current_text
+    lines = ["[recent room — last few exchanges, for memory; do not respond to these, only the message after [now]]"]
+    for h in history:
+        role = "me" if h.get("role") == "user" else "you"
+        text = (h.get("text") or "").strip()
+        if not text:
+            continue
+        # Light truncation per turn to keep budget tight
+        if len(text) > 800:
+            text = text[:800] + "…"
+        lines.append(f"{role}: {text}")
+    lines.append("")
+    lines.append("[now]")
+    lines.append(current_text)
+    return "\n".join(lines)
+
 @api_router.post("/chat", response_model=ChatResponse)
 async def chat(req: ChatRequest):
     if not req.text or not req.text.strip():
@@ -384,28 +407,24 @@ async def chat(req: ChatRequest):
     if not EMERGENT_LLM_KEY:
         raise HTTPException(status_code=500, detail="LLM key not configured")
 
+    # 1. Fetch recent history BEFORE inserting the new one
+    history = await _recent_history(limit=10)
+
+    # 2. Persist the user message
     user_msg = ChatMessage(role="user", text=req.text.strip(), mode=req.mode)
     user_doc = user_msg.model_dump()
     user_doc["timestamp"] = user_doc["timestamp"].isoformat()
     await db.chat_messages.insert_one(user_doc)
 
-    # Build context: recent history (before current)
-    history = await _recent_history(limit=10)
-
-    # Gather data-aware context based on what the user is asking about
+    # 3. Gather data-aware context based on what the user is asking about
     data_context = await _gather_context(req.text)
 
+    # 4. Build ONE user message with history baked in, then make a SINGLE LLM call
     chat_obj = _make_chat(req.mode, data_context=data_context)
-    # Replay prior user turns so the LlmChat session has light memory.
-    for h in history[:-1]:
-        if h["role"] == "user":
-            try:
-                await chat_obj.send_message(UserMessage(text=h["text"]))
-            except Exception:
-                pass
+    composed = _format_user_message_with_history(history, req.text.strip())
 
     try:
-        reply_text = await chat_obj.send_message(UserMessage(text=req.text.strip()))
+        reply_text = await chat_obj.send_message(UserMessage(text=composed))
     except Exception as e:
         logging.exception("LLM error")
         raise HTTPException(status_code=502, detail=f"goblin is quiet right now: {e}")

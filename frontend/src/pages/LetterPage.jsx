@@ -1,45 +1,8 @@
 import { useEffect, useState } from "react";
 import { api } from "../lib/api";
+import { renderBody } from "../lib/markdown";
 import { Mail, RefreshCw, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-
-function renderInline(text) {
-  // Convert **bold** to React spans. Returns an array of nodes.
-  const parts = [];
-  let i = 0;
-  const re = /\*\*([^*]+)\*\*/g;
-  let m;
-  let last = 0;
-  while ((m = re.exec(text)) !== null) {
-    if (m.index > last) parts.push(text.slice(last, m.index));
-    parts.push(<strong key={i++} className="text-moss-50 font-semibold">{m[1]}</strong>);
-    last = m.index + m[0].length;
-  }
-  if (last < text.length) parts.push(text.slice(last));
-  return parts;
-}
-
-function renderBody(text) {
-  if (!text) return null;
-  const lines = text.split("\n");
-  return lines.map((line, i) => {
-    const trim = line.trim();
-    if (!trim) return <div key={i} className="h-2" />;
-    const numMatch = trim.match(/^(\d+)[.)]\s+(.+)$/);
-    if (numMatch) {
-      return (
-        <div key={i} className="flex gap-3 text-moss-100">
-          <span className="text-amber font-heading shrink-0">{numMatch[1]}.</span>
-          <span>{renderInline(numMatch[2])}</span>
-        </div>
-      );
-    }
-    if (/^[-*]\s+/.test(trim)) {
-      return <div key={i} className="text-moss-100 pl-4 relative before:absolute before:left-0 before:top-2 before:w-1.5 before:h-1.5 before:rounded-full before:bg-amber/70">{renderInline(trim.replace(/^[-*]\s+/, ""))}</div>;
-    }
-    return <p key={i} className="text-moss-100 leading-relaxed">{renderInline(trim)}</p>;
-  });
-}
 
 const fmtDate = (iso) => {
   try { return new Date(iso).toLocaleString("en-US", { month: "long", day: "numeric", hour: "numeric", minute: "2-digit" }); } catch { return ""; }

@@ -5,6 +5,7 @@ import ConversationSnapshot from "../components/ConversationSnapshot";
 import ChatInput from "../components/ChatInput";
 import LetterCard from "../components/LetterCard";
 import { sendChat } from "../lib/api";
+import { renderInline } from "../lib/markdown";
 import { toast } from "sonner";
 
 export default function HomePage() {
@@ -40,7 +41,7 @@ export default function HomePage() {
             <div className="mt-6 rounded-3xl warm-card p-5 animate-fade-up" style={{ background: "linear-gradient(180deg, rgba(212,163,115,0.10) 0%, rgba(43,47,42,0.85) 100%)" }} data-testid="latest-reply">
               <div className="text-[10px] uppercase tracking-[0.25em] text-amber/90 mb-2">the goblin</div>
               <p className="font-heading text-lg md:text-xl text-moss-50 leading-snug italic">
-                {lastReply.assistant_msg.text}
+                {renderInline(lastReply.assistant_msg.text)}
               </p>
             </div>
           )}
