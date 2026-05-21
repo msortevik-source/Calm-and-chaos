@@ -230,11 +230,18 @@ GOBLIN_SYSTEM = (
     "not free."
 )
 
-def _make_chat(mode: str) -> LlmChat:
+def _make_chat(mode: str, data_context: str = "") -> LlmChat:
     system = GOBLIN_SYSTEM + "\n\n" + MODE_PROMPTS.get(mode, MODE_PROMPTS["send"])
+    if data_context:
+        system += (
+            "\n\nCONTEXT FROM HER OWN LOGS (last ~30 days). Use this silently to answer "
+            "accurately if she's asking about herself. Do not list it back like a report — "
+            "speak about it like a roommate who actually paid attention. Cite specifics only "
+            "when useful.\n\n" + data_context
+        )
     chat = LlmChat(
         api_key=EMERGENT_LLM_KEY,
-        session_id=f"{SESSION_ID}-{mode}",
+        session_id=f"{SESSION_ID}-{mode}-{uuid.uuid4().hex[:8]}",
         system_message=system,
     ).with_model("openai", "gpt-5.2")
     return chat
@@ -243,6 +250,103 @@ async def _recent_history(limit: int = 12):
     docs = await db.chat_messages.find({}, {"_id": 0}).sort("timestamp", -1).to_list(limit)
     docs.reverse()
     return docs
+
+# --- Data-aware conversation: detect which collections the user is asking about ---
+
+TRAINING_KEYWORDS = ("training", "workout", "workouts", "run", "running", "ran", "strength", "lift", "lifted", "lifting", "gym", "session", "pace", "exercise", "soreness")
+DUMP_KEYWORDS = ("brain dump", "braindump", "dump", "thought", "thoughts", "journal", "wrote", "notes ")
+BUDGET_KEYWORDS = ("budget", "money", "spent", "spend", "spending", "expense", "cost", "kroner", "regret")
+MEAL_KEYWORDS = ("food", "meal", "meals", "ate", "eat", "eating", "protein", "dinner", "lunch", "breakfast", "snack")
+TIME_BROAD = ("week", "month", "lately", "recently", "patterns", "trend", "trends", "how have", "how has", "how am i", "how's my", "how is my", "look at my", "review")
+
+def _summarise_for_context(text: str, training=None, dumps=None, budget=None, meals=None):
+    lines = []
+    if training:
+        last = training[:10]
+        lines.append("RECENT TRAINING (most recent first):")
+        for t in last:
+            bits = [t.get("date") or "", t.get("kind") or ""]
+            if t.get("session_name"): bits.append(t["session_name"])
+            if t.get("kind") == "run":
+                if t.get("distance_km"): bits.append(f'{t["distance_km"]}km')
+                if t.get("duration_min"): bits.append(f'{t["duration_min"]}min')
+                if t.get("pace"): bits.append(t["pace"])
+                if t.get("avg_hr"): bits.append(f'HR {t["avg_hr"]}')
+            if t.get("kind") == "strength":
+                if t.get("exercise"): bits.append(t["exercise"])
+                if t.get("weight_kg"): bits.append(f'{t["weight_kg"]}kg')
+                if t.get("sets") and t.get("reps"): bits.append(f'{t["sets"]}x{t["reps"]}')
+            if t.get("mood_before") or t.get("mood_after"):
+                bits.append(f'mood {t.get("mood_before") or "?"}→{t.get("mood_after") or "?"}')
+            if t.get("win_of_the_day"): bits.append(f'win: {t["win_of_the_day"]}')
+            if t.get("notes"): bits.append(f'notes: {t["notes"][:120]}')
+            lines.append("  - " + " · ".join([b for b in bits if b]))
+    if dumps:
+        last = dumps[:10]
+        lines.append("RECENT BRAIN DUMPS (most recent first):")
+        for d in last:
+            bits = [d.get("timestamp", "")[:10]]
+            if d.get("mood"): bits.append(d["mood"])
+            if d.get("energy") is not None: bits.append(f'energy {d["energy"]}')
+            if d.get("tags"): bits.append("#" + " #".join(d["tags"]))
+            preview = (d.get("text") or "").replace("\n", " ")[:180]
+            lines.append(f'  - {" · ".join(bits)} — {preview}')
+    if budget:
+        last = budget[:10]
+        lines.append("RECENT BUDGET ENTRIES:")
+        for b in last:
+            lines.append(f'  - {b.get("date","")} · {b.get("item","")} · {b.get("amount","")} · {b.get("category","")}{(" · " + b["notes"]) if b.get("notes") else ""}')
+    if meals:
+        last = meals[:10]
+        lines.append("RECENT MEALS:")
+        for m in last:
+            bits = [m.get("date",""), m.get("meal","")]
+            if m.get("protein_source"): bits.append(f'protein: {m["protein_source"]}')
+            if m.get("prep_status"): bits.append(m["prep_status"])
+            if m.get("easy_quick"): bits.append("easy")
+            if m.get("mood_after"): bits.append(f'mood after: {m["mood_after"]}')
+            lines.append("  - " + " · ".join([b for b in bits if b]))
+    return "\n".join(lines)
+
+async def _gather_context(text: str) -> str:
+    """Pull relevant data based on keywords in the user's message. Returns a system-context string or empty."""
+    t = text.lower()
+
+    wants_training = any(k in t for k in TRAINING_KEYWORDS)
+    wants_dumps = any(k in t for k in DUMP_KEYWORDS)
+    wants_budget = any(k in t for k in BUDGET_KEYWORDS)
+    wants_meals = any(k in t for k in MEAL_KEYWORDS)
+    wants_broad = any(k in t for k in TIME_BROAD)
+
+    if wants_broad and not (wants_training or wants_dumps or wants_budget or wants_meals):
+        # broad time question — pull a snapshot of all
+        wants_training = wants_dumps = wants_budget = wants_meals = True
+
+    if not (wants_training or wants_dumps or wants_budget or wants_meals):
+        return ""
+
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
+    training = dumps = budget = meals = None
+    if wants_training:
+        training = await db.training.find({"timestamp": {"$gte": cutoff}}, {"_id": 0}).sort("timestamp", -1).to_list(50)
+    if wants_dumps:
+        dumps = await db.braindumps.find({"timestamp": {"$gte": cutoff}}, {"_id": 0}).sort("timestamp", -1).to_list(50)
+    if wants_budget:
+        budget = await db.budget.find({"timestamp": {"$gte": cutoff}}, {"_id": 0}).sort("timestamp", -1).to_list(50)
+    if wants_meals:
+        meals = await db.meals.find({"timestamp": {"$gte": cutoff}}, {"_id": 0}).sort("timestamp", -1).to_list(50)
+
+    if not any([training, dumps, budget, meals]):
+        return ""
+    summary = _summarise_for_context(text, training=training, dumps=dumps, budget=budget, meals=meals)
+    if not summary.strip():
+        return ""
+    return (
+        "CONTEXT FROM HER OWN LOGS (last ~30 days). Use this to answer accurately if she's "
+        "asking about herself. Do not list it back like a report — speak about it like a "
+        "roommate who actually paid attention. Stay short. Cite specifics only when useful.\n\n"
+        + summary
+    )
 
 # ----- Routes -----
 
@@ -272,11 +376,12 @@ async def chat(req: ChatRequest):
     # Build context: recent history (before current)
     history = await _recent_history(limit=10)
 
-    chat_obj = _make_chat(req.mode)
-    # Prime the LLM with recent history by sending one consolidated context message? Use multi-send.
-    # Simpler: replay messages so LlmChat session has memory.
-    for h in history[:-1]:  # all except the one we just inserted
-        # only replay prior messages
+    # Gather data-aware context based on what the user is asking about
+    data_context = await _gather_context(req.text)
+
+    chat_obj = _make_chat(req.mode, data_context=data_context)
+    # Replay prior user turns so the LlmChat session has light memory.
+    for h in history[:-1]:
         if h["role"] == "user":
             try:
                 await chat_obj.send_message(UserMessage(text=h["text"]))
@@ -547,6 +652,92 @@ async def patterns():
         })
 
     return {"observations": obs}
+
+# ----- Letter from the Room (weekly summary) -----
+
+def _iso_week_key(d: datetime = None):
+    d = d or datetime.now(timezone.utc)
+    y, w, _ = d.isocalendar()
+    return f"{y}-W{w:02d}"
+
+LETTER_SYSTEM = (
+    GOBLIN_SYSTEM +
+    "\n\nThis is the Sunday letter. Quietly review her week using only the data she actually logged. "
+    "Voice: short, warm, observant, dryly funny when honest. Not a report card. Not a coach summary. "
+    "Not 'Dear Em,' bullshit. Just a few sentences and then a short numbered list of 3-5 specific "
+    "things you actually noticed (cite a date, a number, a tag). End with ONE small thing for next "
+    "week — not a goal, a suggestion. If there's almost no data, say so honestly and keep it under "
+    "120 words. If a pattern is clearly forming, name it. If she did nothing this week, do not "
+    "scold — note it, suggest the smallest possible re-entry. Markdown allowed."
+)
+
+@api_router.get("/letter/current")
+async def letter_current(force: bool = False):
+    """Return this week's letter, generating if it doesn't exist yet (or force=true)."""
+    week_key = _iso_week_key()
+    existing = await db.letters.find_one({"week_key": week_key}, {"_id": 0})
+    if existing and not force:
+        return existing
+
+    if not EMERGENT_LLM_KEY:
+        raise HTTPException(status_code=500, detail="LLM key not configured")
+
+    # Pull last 7 days of data
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+    training = await db.training.find({"timestamp": {"$gte": cutoff}}, {"_id": 0}).sort("timestamp", -1).to_list(200)
+    dumps = await db.braindumps.find({"timestamp": {"$gte": cutoff}}, {"_id": 0}).sort("timestamp", -1).to_list(200)
+    budget = await db.budget.find({"timestamp": {"$gte": cutoff}}, {"_id": 0}).sort("timestamp", -1).to_list(200)
+    meals = await db.meals.find({"timestamp": {"$gte": cutoff}}, {"_id": 0}).sort("timestamp", -1).to_list(200)
+    chats = await db.chat_messages.find({"timestamp": {"$gte": cutoff}}, {"_id": 0}).sort("timestamp", -1).to_list(200)
+
+    counts = {
+        "training_sessions": len(training),
+        "training_days": len({t.get("date") for t in training if t.get("date")}),
+        "brain_dumps": len(dumps),
+        "budget_entries": len(budget),
+        "meals_logged": len(meals),
+        "chat_messages_user": len([m for m in chats if m.get("role") == "user"]),
+        "hard_truth_asks": len([m for m in chats if m.get("mode") == "hard_truth"]),
+    }
+    # heavy moods this week
+    heavy_moods = len([d for d in dumps if d.get("mood") in ("heavy", "meh")])
+    good_moods = len([d for d in dumps if d.get("mood") in ("good", "flying")])
+
+    summary_blob = (
+        f"This week ({week_key}):\n"
+        f"- training_sessions: {counts['training_sessions']} across {counts['training_days']} days\n"
+        f"- brain dumps: {counts['brain_dumps']} (heavy/meh tags: {heavy_moods}, good/flying: {good_moods})\n"
+        f"- budget entries: {counts['budget_entries']}\n"
+        f"- meals logged: {counts['meals_logged']}\n"
+        f"- chat messages (user): {counts['chat_messages_user']}, hard-truth asks: {counts['hard_truth_asks']}\n\n"
+    )
+    summary_blob += _summarise_for_context("", training=training, dumps=dumps, budget=budget, meals=meals)
+
+    letter_chat = LlmChat(
+        api_key=EMERGENT_LLM_KEY,
+        session_id=f"letter-{week_key}",
+        system_message=LETTER_SYSTEM,
+    ).with_model("openai", "gpt-5.2")
+
+    try:
+        text = await letter_chat.send_message(UserMessage(text=summary_blob))
+    except Exception as e:
+        logging.exception("letter gen failed")
+        raise HTTPException(status_code=502, detail=f"goblin couldn't write the letter: {e}")
+
+    letter = {
+        "week_key": week_key,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "body": str(text).strip(),
+        "counts": counts,
+    }
+    await db.letters.update_one({"week_key": week_key}, {"$set": letter}, upsert=True)
+    return letter
+
+@api_router.get("/letter/archive")
+async def letter_archive(limit: int = 20):
+    docs = await db.letters.find({}, {"_id": 0}).sort("generated_at", -1).to_list(limit)
+    return {"letters": docs}
 
 # ----- Google Calendar OAuth (single user) -----
 

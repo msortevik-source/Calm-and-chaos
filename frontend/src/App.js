@@ -8,6 +8,7 @@ import BrainDumpPage from "./pages/BrainDumpPage";
 import TrainingPage from "./pages/TrainingPage";
 import BudgetFoodPage from "./pages/BudgetFoodPage";
 import PatternsPage from "./pages/PatternsPage";
+import LetterPage from "./pages/LetterPage";
 
 function App() {
   return (
@@ -21,6 +22,7 @@ function App() {
             <Route path="/training" element={<TrainingPage />} />
             <Route path="/budget" element={<BudgetFoodPage />} />
             <Route path="/patterns" element={<PatternsPage />} />
+            <Route path="/letter" element={<LetterPage />} />
           </Route>
         </Routes>
       </BrowserRouter>

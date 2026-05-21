@@ -369,6 +369,111 @@ class TestPatterns:
                 client.delete(f"{API}/budget/{eid}", timeout=30)
 
 
+# ---------- Iteration 3: data-aware chat ----------
+class TestDataAwareChat:
+    def test_chat_with_training_keyword_pulls_context(self, client):
+        # Seed 2 training entries within last 30 days
+        seeded = []
+        for payload in [
+            {"kind": "run", "distance_km": 6.0, "duration_min": 33, "pace": "5:30", "notes": "TEST_iter3 easy run", "mood_after": "good"},
+            {"kind": "strength", "exercise": "TEST_iter3 squat", "weight_kg": 65, "sets": 3, "reps": 5, "session_name": "TEST_iter3 lower"},
+        ]:
+            r = client.post(f"{API}/training", json=payload, timeout=30)
+            assert r.status_code == 200
+            seeded.append(r.json()["id"])
+        try:
+            r = client.post(
+                f"{API}/chat",
+                json={"text": "look at my training this week", "mode": "send"},
+                timeout=180,
+            )
+            assert r.status_code == 200, r.text
+            d = r.json()
+            assert isinstance(d["reply"], str)
+            assert len(d["reply"].strip()) > 0
+            _no_mongo_id(d)
+        finally:
+            for eid in seeded:
+                client.delete(f"{API}/training/{eid}", timeout=30)
+
+    def test_chat_without_data_keywords_still_works(self, client):
+        r = client.post(
+            f"{API}/chat",
+            json={"text": "i feel weird", "mode": "send"},
+            timeout=180,
+        )
+        assert r.status_code == 200, r.text
+        d = r.json()
+        assert isinstance(d["reply"], str)
+        assert len(d["reply"].strip()) > 0
+
+
+# ---------- Iteration 3: weekly letter ----------
+class TestLetter:
+    def test_letter_current_generates_and_caches(self, client):
+        import time
+        # First call: may generate (LLM call) — could be cached if previous run hit it
+        t0 = time.time()
+        r1 = client.get(f"{API}/letter/current", timeout=180)
+        first_dur = time.time() - t0
+        assert r1.status_code == 200, r1.text
+        d1 = r1.json()
+        _no_mongo_id(d1)
+        for key in ("week_key", "generated_at", "body", "counts"):
+            assert key in d1, f"missing {key}"
+        assert isinstance(d1["body"], str) and len(d1["body"].strip()) > 0
+        counts = d1["counts"]
+        for ck in (
+            "training_sessions", "training_days", "brain_dumps",
+            "budget_entries", "meals_logged", "chat_messages_user", "hard_truth_asks",
+        ):
+            assert ck in counts, f"missing count {ck}"
+            assert isinstance(counts[ck], int)
+
+        # Second call: must be cached (same week_key, same generated_at, and fast)
+        t1 = time.time()
+        r2 = client.get(f"{API}/letter/current", timeout=30)
+        second_dur = time.time() - t1
+        assert r2.status_code == 200
+        d2 = r2.json()
+        assert d2["week_key"] == d1["week_key"]
+        assert d2["generated_at"] == d1["generated_at"], "cache miss — generated_at changed"
+        # Cached call should be reasonably fast (< 5s; LLM gen typically takes 15-40s)
+        assert second_dur < 5.0, f"cached call too slow: {second_dur:.1f}s (first was {first_dur:.1f}s)"
+
+    def test_letter_force_regenerates(self, client):
+        # Get current (cached) letter
+        r0 = client.get(f"{API}/letter/current", timeout=180)
+        assert r0.status_code == 200
+        original_generated_at = r0.json()["generated_at"]
+        original_week_key = r0.json()["week_key"]
+
+        # Force regeneration
+        r1 = client.get(f"{API}/letter/current", params={"force": "true"}, timeout=180)
+        assert r1.status_code == 200
+        d1 = r1.json()
+        assert d1["week_key"] == original_week_key
+        assert d1["generated_at"] != original_generated_at, "force=true did not regenerate"
+        assert isinstance(d1["body"], str) and len(d1["body"].strip()) > 0
+
+    def test_letter_archive(self, client):
+        # Ensure at least one letter exists
+        client.get(f"{API}/letter/current", timeout=180)
+        r = client.get(f"{API}/letter/archive", timeout=30)
+        assert r.status_code == 200
+        d = r.json()
+        _no_mongo_id(d)
+        assert "letters" in d
+        letters = d["letters"]
+        assert isinstance(letters, list)
+        assert len(letters) >= 1
+        # sorted by generated_at desc
+        ts = [ll["generated_at"] for ll in letters]
+        assert ts == sorted(ts, reverse=True), f"letters not sorted desc by generated_at: {ts}"
+        for ll in letters:
+            assert "week_key" in ll and "body" in ll and "counts" in ll
+
+
 # ---------- Calendar ----------
 class TestCalendar:
     def test_status_keys(self, client):

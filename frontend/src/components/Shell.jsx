@@ -1,5 +1,5 @@
 import { NavLink, Outlet } from "react-router-dom";
-import { Home, MessageCircle, Notebook, Activity, Sparkles, Wallet } from "lucide-react";
+import { Home, MessageCircle, Notebook, Activity, Sparkles, Wallet, Mail } from "lucide-react";
 
 const links = [
   { to: "/", label: "Home", icon: Home, testid: "nav-home" },
@@ -7,6 +7,7 @@ const links = [
   { to: "/braindump", label: "Brain dump", icon: Notebook, testid: "nav-braindump" },
   { to: "/training", label: "Training", icon: Activity, testid: "nav-training" },
   { to: "/budget", label: "Budget & food", icon: Wallet, testid: "nav-budget" },
+  { to: "/letter", label: "Letter", icon: Mail, testid: "nav-letter" },
   { to: "/patterns", label: "Patterns", icon: Sparkles, testid: "nav-patterns" },
 ];
 

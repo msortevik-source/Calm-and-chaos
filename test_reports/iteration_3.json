@@ -1,0 +1,27 @@
+{
+  "summary": "Iteration 3 backend testing for Calm & Chaos complete. All 33/33 tests pass against the public URL in 62s. Covers full regression of iteration 1+2 surface (28 tests: greeting, chat 4 modes + empty/recent/history/clear/ground_me, braindump CRUD + new fields, training CRUD + template + new fields, budget CRUD + aggregates + 400, meal CRUD + 400, patterns baseline + themes + mood drift + money, calendar status/oauth/today) PLUS 5 new iteration-3 tests: (1) chat with 'look at my training this week' after seeding 2 training entries — returned 200 with non-empty reply, no timeout (~5-8s); (2) chat with non-data-keyword text 'i feel weird' — 200 non-empty; (3) GET /api/letter/current first-call generated full letter with week_key, generated_at, non-empty body, counts dict containing all 7 required keys (training_sessions, training_days, brain_dumps, budget_entries, meals_logged, chat_messages_user, hard_truth_asks); second call returned identical generated_at and was fast (<5s) confirming cache hit; (4) force=true regenerated — same week_key but new generated_at and new body; (5) /api/letter/archive returned letters list sorted by generated_at desc with at least one entry containing week_key/body/counts. No _id leaks. google_tokens collection untouched.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "letter_current LLM call has no timeout / retry. If gpt-5.2 hangs, the FastAPI request blocks until the upstream eventually errors; consider asyncio.wait_for(..., timeout=60) and a graceful 504 response.",
+    "_gather_context substring matching on TIME_BROAD includes 'week' and 'month' which will fire for ANY message containing those words (e.g. 'this weekend was wild' contains 'week'). Consider word-boundary regex (\\bweek\\b) to reduce false positives.",
+    "letter_current always uses _iso_week_key() of 'now' — there's no way to fetch/regenerate a specific past week_key explicitly. Archive returns past letters but they can never be regenerated. Consider adding ?week_key=YYYY-Www query param.",
+    "Letter caching uses week_key as the only cache key but DB row also contains counts that drift as more data lands during the week. Force=true is the only way to refresh — fine for MVP but worth noting; could auto-stale after N hours.",
+    "letter_current returns 502 with raw exception text in the detail string ('goblin couldn't write the letter: {e}') — fine for debug but consider sanitizing for production.",
+    "LETTER_SYSTEM session_id is hardcoded to f'letter-{week_key}' — multiple force=true calls in the same week reuse the same LlmChat session which may accumulate state across calls. Add uuid suffix similar to _make_chat.",
+    "Carried-over (not blocking): patterns endpoint loads up to 2000 docs from 5 collections per call; DELETE endpoints return ok:true even on miss; mode/category/mood fields not Literal-validated."
+  ],
+  "updated_files": ["/app/backend/tests/backend_test.py"],
+  "success_rate": {"backend": "100% (33/33)", "frontend": "not tested (backend only request)"},
+  "test_credentials": "N/A — single-user app, no auth",
+  "seed_data_creation": "Iteration-3 additions: TestDataAwareChat seeds 2 TEST_iter3 training entries before the data-aware chat call and deletes them in a finally block. TestLetter does not seed anything but does write to db.letters (week_key keyed upsert). letters collection NOT deleted post-test — they're a legitimate weekly artifact and the cache test relies on it. google_tokens collection untouched.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "All 33 backend tests green. Run `pytest /app/backend/tests/backend_test.py -v` to re-verify (~62s including LLM calls). Letter generation typically takes 8-15s on first call this run; cache hit was <1s. The first letter_current test is robust to either fresh-gen or cache-hit (it just checks body+counts structure); the cache-equality assertion runs on consecutive calls within the same test so timing is reliable. Force-regenerate test asserts generated_at differs.",
+  "rca of the issue": "No issues found. New iteration-3 surface (data-aware chat context injection + Sunday letter generation/cache/force/archive) all working as specified."
+}
