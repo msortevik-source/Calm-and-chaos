@@ -253,11 +253,27 @@ async def _recent_history(limit: int = 12):
 
 # --- Data-aware conversation: detect which collections the user is asking about ---
 
+import re as _re
+
 TRAINING_KEYWORDS = ("training", "workout", "workouts", "run", "running", "ran", "strength", "lift", "lifted", "lifting", "gym", "session", "pace", "exercise", "soreness")
-DUMP_KEYWORDS = ("brain dump", "braindump", "dump", "thought", "thoughts", "journal", "wrote", "notes ")
+DUMP_KEYWORDS = ("brain dump", "braindump", "dump", "thought", "thoughts", "journal", "wrote", "notes")
 BUDGET_KEYWORDS = ("budget", "money", "spent", "spend", "spending", "expense", "cost", "kroner", "regret")
 MEAL_KEYWORDS = ("food", "meal", "meals", "ate", "eat", "eating", "protein", "dinner", "lunch", "breakfast", "snack")
-TIME_BROAD = ("week", "month", "lately", "recently", "patterns", "trend", "trends", "how have", "how has", "how am i", "how's my", "how is my", "look at my", "review")
+TIME_BROAD_WORDS = ("week", "month", "lately", "recently", "patterns", "trend", "trends")
+TIME_BROAD_PHRASES = ("how have", "how has", "how am i", "how's my", "how is my", "look at my", "review")
+
+def _word_match(text: str, keywords) -> bool:
+    """Return True if any keyword appears as a whole word (or full phrase). Case-insensitive."""
+    for kw in keywords:
+        # Multi-word phrases: literal substring match (already specific enough)
+        if " " in kw:
+            if kw in text:
+                return True
+            continue
+        # Single words: word-boundary regex so 'week' doesn't match 'weekend'
+        if _re.search(rf"\b{_re.escape(kw)}\b", text):
+            return True
+    return False
 
 def _summarise_for_context(text: str, training=None, dumps=None, budget=None, meals=None):
     lines = []
@@ -312,11 +328,11 @@ async def _gather_context(text: str) -> str:
     """Pull relevant data based on keywords in the user's message. Returns a system-context string or empty."""
     t = text.lower()
 
-    wants_training = any(k in t for k in TRAINING_KEYWORDS)
-    wants_dumps = any(k in t for k in DUMP_KEYWORDS)
-    wants_budget = any(k in t for k in BUDGET_KEYWORDS)
-    wants_meals = any(k in t for k in MEAL_KEYWORDS)
-    wants_broad = any(k in t for k in TIME_BROAD)
+    wants_training = _word_match(t, TRAINING_KEYWORDS)
+    wants_dumps = _word_match(t, DUMP_KEYWORDS)
+    wants_budget = _word_match(t, BUDGET_KEYWORDS)
+    wants_meals = _word_match(t, MEAL_KEYWORDS)
+    wants_broad = _word_match(t, TIME_BROAD_WORDS) or any(p in t for p in TIME_BROAD_PHRASES)
 
     if wants_broad and not (wants_training or wants_dumps or wants_budget or wants_meals):
         # broad time question — pull a snapshot of all
