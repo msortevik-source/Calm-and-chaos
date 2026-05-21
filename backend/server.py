@@ -385,8 +385,22 @@ async def calendar_status():
 async def oauth_login():
     if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
         raise HTTPException(status_code=500, detail="Google credentials not configured")
-    flow = _flow()
-    url, _state = flow.authorization_url(access_type="offline", prompt="consent", include_granted_scopes="true")
+    # Build the auth URL manually to avoid PKCE (our client is confidential).
+    from urllib.parse import urlencode
+    params = {
+        "client_id": GOOGLE_CLIENT_ID,
+        "redirect_uri": REDIRECT_URI,
+        "response_type": "code",
+        "scope": " ".join([
+            "https://www.googleapis.com/auth/calendar.readonly",
+            "openid",
+            "https://www.googleapis.com/auth/userinfo.email",
+        ]),
+        "access_type": "offline",
+        "prompt": "consent",
+        "include_granted_scopes": "true",
+    }
+    url = "https://accounts.google.com/o/oauth2/v2/auth?" + urlencode(params)
     return {"authorization_url": url}
 
 @api_router.get("/oauth/calendar/callback")
