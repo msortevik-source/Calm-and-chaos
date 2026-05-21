@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { listBudget, createBudget, deleteBudget, listMeals, createMeal, deleteMeal, MOODS } from "../lib/api";
+import DiscussButton from "../components/DiscussButton";
 import { Trash2, Wallet, Soup, Plus } from "lucide-react";
 import { toast } from "sonner";
 
@@ -90,6 +91,7 @@ function BudgetSection() {
             </div>
             <div className="text-xs text-moss-200 mr-3 capitalize">{e.category}</div>
             <div className="font-heading text-moss-50 text-base">{Number(e.amount).toFixed(2)}</div>
+            <DiscussButton testid={`budget-discuss-${e.id}`} seed={`About this spending: ${e.item} — ${Number(e.amount).toFixed(2)} (${e.category || "other"}) on ${e.date}${e.notes ? `. Notes: ${e.notes}` : ""}.\n\n`} />
             <button data-testid={`budget-delete-${e.id}`} onClick={async () => { await deleteBudget(e.id); load(); }} className="opacity-30 hover:opacity-100 text-moss-200 hover:text-amber transition-opacity ml-3">
               <Trash2 size={15} />
             </button>
@@ -172,6 +174,7 @@ function MealSection() {
             </div>
             <div className="text-xs text-moss-200 mr-2 capitalize">{e.prep_status}</div>
             {e.mood_after && <div className="text-xs text-amber/90 mr-3">{e.mood_after}</div>}
+            <DiscussButton testid={`meal-discuss-${e.id}`} seed={`About this meal on ${e.date}: ${e.meal}${e.protein_source ? ` (protein: ${e.protein_source})` : ""}${e.easy_quick ? " — easy/quick" : ""}${e.prep_status ? ` — ${e.prep_status}` : ""}${e.mood_after ? `. Mood after: ${e.mood_after}` : ""}${e.notes ? `. Notes: ${e.notes}` : ""}.\n\n`} />
             <button data-testid={`meal-delete-${e.id}`} onClick={async () => { await deleteMeal(e.id); load(); }} className="opacity-30 hover:opacity-100 text-moss-200 hover:text-amber transition-opacity">
               <Trash2 size={15} />
             </button>

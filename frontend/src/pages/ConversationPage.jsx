@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import ChatInput from "../components/ChatInput";
 import { getChatHistory, sendChat, clearChat } from "../lib/api";
 import { renderInline } from "../lib/markdown";
@@ -8,7 +9,10 @@ import { toast } from "sonner";
 export default function ConversationPage() {
   const [messages, setMessages] = useState([]);
   const [busy, setBusy] = useState(false);
+  const [seed, setSeed] = useState("");
   const endRef = useRef(null);
+  const location = useLocation();
+  const navigate = useNavigate();
 
   const load = async () => {
     const d = await getChatHistory();
@@ -16,6 +20,15 @@ export default function ConversationPage() {
   };
 
   useEffect(() => { load(); }, []);
+
+  // If we arrived with state.seed, prefill the input (don't auto-send — keep user agency)
+  useEffect(() => {
+    if (location.state && location.state.seed) {
+      setSeed(location.state.seed);
+      // Clear router state so refresh doesn't re-trigger
+      navigate(location.pathname, { replace: true, state: {} });
+    }
+  }, [location, navigate]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -73,7 +86,7 @@ export default function ConversationPage() {
         <div ref={endRef} />
       </div>
 
-      <ChatInput onSubmit={submit} busy={busy} placeholder="Continue. The room is listening." />
+      <ChatInput onSubmit={submit} busy={busy} initialValue={seed} placeholder="Continue. The room is listening." />
     </div>
   );
 }

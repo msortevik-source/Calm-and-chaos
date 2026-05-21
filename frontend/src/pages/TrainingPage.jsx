@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { getTemplate, listTraining, createTraining, deleteTraining, MOODS } from "../lib/api";
+import DiscussButton from "../components/DiscussButton";
 import { Trash2, Activity, Footprints, Dumbbell, NotebookPen } from "lucide-react";
 import { toast } from "sonner";
 
@@ -155,9 +156,12 @@ export default function TrainingPage() {
               {e.notes && <p className="text-moss-200 text-sm mt-1">{e.notes}</p>}
               {e.soreness_notes && <p className="text-moss-200/80 text-xs mt-1">soreness — {e.soreness_notes}</p>}
             </div>
-            <button data-testid={`training-delete-${e.id}`} onClick={() => remove(e.id)} className="opacity-30 hover:opacity-100 text-moss-200 hover:text-amber transition-opacity">
-              <Trash2 size={15} />
-            </button>
+            <div className="flex flex-col gap-2 items-center shrink-0">
+              <DiscussButton testid={`training-discuss-${e.id}`} seed={`About this training session on ${e.date || ""}: ${e.session_name || e.kind || ""}${e.kind === "run" && e.distance_km ? ` — ${e.distance_km}km${e.duration_min ? ` in ${e.duration_min}min` : ""}${e.pace ? ` at ${e.pace}` : ""}` : ""}${e.kind === "strength" && e.exercise ? ` — ${e.exercise}${e.weight_kg ? ` ${e.weight_kg}kg` : ""}${e.sets && e.reps ? ` ${e.sets}×${e.reps}` : ""}` : ""}${e.mood_before || e.mood_after ? ` (mood ${e.mood_before || "?"}→${e.mood_after || "?"})` : ""}${e.win_of_the_day ? `. Win: ${e.win_of_the_day}` : ""}${e.notes ? `. Notes: ${e.notes}` : ""}.\n\n`} />
+              <button data-testid={`training-delete-${e.id}`} onClick={() => remove(e.id)} className="opacity-30 hover:opacity-100 text-moss-200 hover:text-amber transition-opacity">
+                <Trash2 size={15} />
+              </button>
+            </div>
           </div>
         ))}
       </div>

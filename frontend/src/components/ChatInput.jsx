@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Send, Flame, Anchor, ListTree, Loader2 } from "lucide-react";
 
 const MODES = [
@@ -8,8 +8,13 @@ const MODES = [
   { id: "organize", label: "Organize my brain", icon: ListTree, testid: "chat-organize" },
 ];
 
-export default function ChatInput({ onSubmit, busy, compact = false, placeholder }) {
-  const [text, setText] = useState("");
+export default function ChatInput({ onSubmit, busy, compact = false, placeholder, initialValue = "" }) {
+  const [text, setText] = useState(initialValue);
+
+  // When initialValue changes (e.g. arriving via "discuss this"), update the textarea
+  useEffect(() => {
+    if (initialValue) setText(initialValue);
+  }, [initialValue]);
 
   const submit = async (mode) => {
     const t = text.trim();

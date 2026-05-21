@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { listBrainDumps, createBrainDump, deleteBrainDump, MOODS } from "../lib/api";
+import DiscussButton from "../components/DiscussButton";
 import { Trash2, Plus } from "lucide-react";
 
 const fmt = (iso) => {
@@ -106,9 +107,12 @@ export default function BrainDumpPage() {
                 </div>
               )}
             </div>
-            <button data-testid={`braindump-delete-${e.id}`} onClick={() => remove(e.id)} className="opacity-30 hover:opacity-100 transition-opacity text-moss-200 hover:text-amber self-start">
-              <Trash2 size={15} />
-            </button>
+            <div className="flex flex-col gap-2 self-start items-center">
+              <DiscussButton testid={`braindump-discuss-${e.id}`} seed={`About this brain dump from ${fmt(e.timestamp)}${e.mood ? ` (mood: ${e.mood}${e.energy ? `, energy ${e.energy}` : ""})` : ""}${e.tags && e.tags.length ? ` [tags: ${e.tags.join(", ")}]` : ""}:\n\n"${e.text}"\n\n`} />
+              <button data-testid={`braindump-delete-${e.id}`} onClick={() => remove(e.id)} className="opacity-30 hover:opacity-100 transition-opacity text-moss-200 hover:text-amber">
+                <Trash2 size={15} />
+              </button>
+            </div>
           </div>
         ))}
       </div>

@@ -4,6 +4,7 @@ import CalendarSnapshot from "../components/CalendarSnapshot";
 import ConversationSnapshot from "../components/ConversationSnapshot";
 import ChatInput from "../components/ChatInput";
 import LetterCard from "../components/LetterCard";
+import EveningCheckin from "../components/EveningCheckin";
 import { sendChat } from "../lib/api";
 import { renderInline } from "../lib/markdown";
 import { toast } from "sonner";
@@ -47,9 +48,10 @@ export default function HomePage() {
           )}
         </div>
 
-        {/* Side column — calendar + conv snapshot + letter */}
+        {/* Side column — calendar + conv snapshot + letter + evening check-in */}
         <div className="lg:col-span-5 lg:col-start-8 space-y-6">
           <CalendarSnapshot />
+          <EveningCheckin />
           <LetterCard />
           <ConversationSnapshot refreshKey={refresh} />
         </div>
