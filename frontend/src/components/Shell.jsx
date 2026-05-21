@@ -1,20 +1,20 @@
 import { NavLink, Outlet } from "react-router-dom";
-import { Home, MessageCircle, Notebook, Activity, Sparkles } from "lucide-react";
+import { Home, MessageCircle, Notebook, Activity, Sparkles, Wallet } from "lucide-react";
 
 const links = [
   { to: "/", label: "Home", icon: Home, testid: "nav-home" },
   { to: "/conversation", label: "Conversation", icon: MessageCircle, testid: "nav-conversation" },
   { to: "/braindump", label: "Brain dump", icon: Notebook, testid: "nav-braindump" },
   { to: "/training", label: "Training", icon: Activity, testid: "nav-training" },
+  { to: "/budget", label: "Budget & food", icon: Wallet, testid: "nav-budget" },
   { to: "/patterns", label: "Patterns", icon: Sparkles, testid: "nav-patterns" },
 ];
 
 export default function Shell() {
   return (
-    <div className="app-root grain-overlay vignette">
+    <div className="app-root warm-depth grain-overlay">
       <div className="content-layer min-h-screen flex">
-        {/* Sidebar */}
-        <aside className="hidden md:flex flex-col w-64 px-8 py-10 border-r border-moss-700/60 sticky top-0 h-screen" data-testid="sidebar">
+        <aside className="hidden md:flex flex-col w-64 px-8 py-10 border-r border-moss-700/70 sticky top-0 h-screen" data-testid="sidebar">
           <div className="mb-12">
             <div className="font-heading text-2xl text-moss-50 leading-tight">Calm <span className="text-amber">&</span> Chaos</div>
             <div className="text-xs text-moss-200 mt-1 tracking-wide">the familiar room</div>
@@ -41,7 +41,6 @@ export default function Shell() {
           </div>
         </aside>
 
-        {/* Mobile top bar */}
         <header className="md:hidden fixed top-0 left-0 right-0 z-30 bg-moss-900/95 backdrop-blur border-b border-moss-700/60">
           <div className="flex items-center justify-between px-5 py-4">
             <div className="font-heading text-lg text-moss-50">Calm <span className="text-amber">&</span> Chaos</div>

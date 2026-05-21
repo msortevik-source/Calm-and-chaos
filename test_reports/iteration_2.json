@@ -1,0 +1,35 @@
+{
+  "summary": "Iteration 2 backend testing for Calm & Chaos complete. All 28/28 tests passed against the public URL. Covers regression of iteration 1 surface (greeting, chat 4 modes + empty + recent/history/clear, braindump CRUD, training CRUD + template, patterns baseline, calendar status/oauth/today) PLUS new iteration-2 surface: new optional fields on braindump (energy/mood/tags) and training (session_name, mood_before, mood_after, win_of_the_day, soreness_notes) round-trip via GET; new budget endpoints (CRUD + month_total + by_category aggregates + empty-item 400); new meal endpoints (CRUD + empty 400); expanded patterns observations seeded and verified — 'themes' (3 braindumps tagged work), 'mood' drift (6 braindumps with downward mood trend), 'money' (3 regret-category budget entries); ground_me chat on 'i ruined everything' returns non-empty reply. Backward compatibility verified: POST /braindump with only {text} works; POST /training with just {kind, distance_km} works. No _id leaks in any response. Linked google calendar token preserved (no calendar collection deletion).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Patterns mood-drift window in server.py L487-491 uses `moods[len(moods)//2:]` as 'first_half' (older) and `moods[:len(moods)//2]` as 'second_half' (recent) because the source list `dumps` comes in descending timestamp order — this is correct but counter-intuitive; add a comment to prevent future regressions or sort explicitly by timestamp asc before splitting.",
+    "BudgetCreate / MealCreate do not validate category / mood / prep_status enum values — any string is accepted. Consider Literal[...] types to align with documented vocab (food|transport|bills|joy|regret|essential|other for budget category; heavy|meh|ok|good|flying for mood_after; idea|planned|prepped|eaten for prep_status).",
+    "DELETE /api/budget/{id}, /api/meal/{id}, /api/braindump/{id}, /api/training/{id} return {ok: true} even when the id does not exist. Consider returning 404 when delete_one matched_count == 0 for clearer client feedback.",
+    "patterns endpoint loads up to 2000 docs across 5 collections every call (no aggregation pipeline). Fine at single-user scale but worth noting if data grows; should ideally use $match + $project at the DB layer.",
+    "budget month_total filter uses string-prefix match on date (`startswith(ym)`) — assumes date is ISO 'YYYY-MM-DD'. Any other date format (e.g. 'DD/MM/YYYY') would silently be excluded. Pydantic-validate the date field as ISO if it's required.",
+    "Carried over from iteration 1: ChatRequest.mode accepts any string (no Literal validation); calendar_today returns 200 with linked:false on real Google API errors (masks failures)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/backend_test.py"
+  ],
+  "success_rate": {"backend": "100% (28/28)", "frontend": "not tested (backend only request)"},
+  "test_credentials": "N/A — single-user app, no auth",
+  "seed_data_creation": "All seed data is TEST_-prefixed and cleaned up within each test (finally blocks delete created braindump/budget/meal/training entries; chat history is cleared at module start and via test_chat_clear). google_tokens collection is never touched.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend is fully green for iteration 2. Run `pytest /app/backend/tests/backend_test.py -v` to re-verify. New test classes: TestBudget, TestMeal, TestPatterns.test_patterns_themes_with_work_tag, TestPatterns.test_patterns_mood_drift, TestPatterns.test_patterns_money_regret. Mood-drift seed uses 6 entries (flying, good, good, meh, heavy, heavy) inserted oldest-first to trigger downward drift; logic in server.py L487-491 splits the desc-sorted list with [len/2:] = older, [:len/2] = recent.",
+  "rca of the issue": "No issues found. All requested endpoints and backward-compat scenarios verified."
+}

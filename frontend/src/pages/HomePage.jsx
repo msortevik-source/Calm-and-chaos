@@ -36,7 +36,7 @@ export default function HomePage() {
           <ChatInput onSubmit={submit} busy={busy} />
 
           {lastReply?.assistant_msg && (
-            <div className="mt-6 rounded-3xl border border-amber/30 bg-amber-soft p-5 animate-fade-up" data-testid="latest-reply">
+            <div className="mt-6 rounded-3xl warm-card p-5 animate-fade-up" style={{ background: "linear-gradient(180deg, rgba(212,163,115,0.10) 0%, rgba(43,47,42,0.85) 100%)" }} data-testid="latest-reply">
               <div className="text-[10px] uppercase tracking-[0.25em] text-amber/90 mb-2">the goblin</div>
               <p className="font-heading text-lg md:text-xl text-moss-50 leading-snug italic">
                 {lastReply.assistant_msg.text}

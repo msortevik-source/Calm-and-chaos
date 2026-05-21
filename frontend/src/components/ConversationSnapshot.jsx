@@ -12,7 +12,7 @@ export default function ConversationSnapshot({ refreshKey }) {
 
   if (messages.length === 0) {
     return (
-      <div className="rounded-3xl border border-moss-700 bg-moss-800/60 p-6" data-testid="conversation-snapshot">
+      <div className="rounded-3xl warm-card p-6" data-testid="conversation-snapshot">
         <div className="flex items-center gap-2 text-moss-200 text-xs uppercase tracking-[0.25em] mb-3">
           <MessageCircle size={14} /> Last said
         </div>
@@ -24,7 +24,7 @@ export default function ConversationSnapshot({ refreshKey }) {
   }
 
   return (
-    <div className="rounded-3xl border border-moss-700 bg-moss-800/60 p-6" data-testid="conversation-snapshot">
+    <div className="rounded-3xl warm-card p-6" data-testid="conversation-snapshot">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2 text-moss-200 text-xs uppercase tracking-[0.25em]">
           <MessageCircle size={14} /> Last said

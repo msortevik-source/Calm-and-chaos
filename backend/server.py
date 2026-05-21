@@ -64,16 +64,19 @@ class ChatResponse(BaseModel):
 
 class BrainDumpCreate(BaseModel):
     text: str
+    energy: Optional[int] = None  # 1-5
+    mood: Optional[str] = None    # heavy | meh | ok | good | flying
+    tags: Optional[List[str]] = None
 
-class BrainDump(BaseModel):
+class BrainDump(BrainDumpCreate):
     model_config = ConfigDict(extra="ignore")
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    text: str
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 class TrainingCreate(BaseModel):
     kind: str  # 'run' | 'strength' | 'note'
     date: Optional[str] = None  # ISO date, defaults to today
+    session_name: Optional[str] = None  # e.g. "4x4 + upper body"
     # run fields
     distance_km: Optional[float] = None
     duration_min: Optional[float] = None
@@ -84,11 +87,41 @@ class TrainingCreate(BaseModel):
     weight_kg: Optional[float] = None
     reps: Optional[int] = None
     sets: Optional[int] = None
-    # shared
+    # shared / mood
     notes: Optional[str] = None
-    feel: Optional[int] = None  # 1-5 scale
+    soreness_notes: Optional[str] = None
+    mood_before: Optional[str] = None  # heavy | meh | ok | good | flying
+    mood_after: Optional[str] = None
+    win_of_the_day: Optional[str] = None
+    feel: Optional[int] = None  # legacy 1-5 scale, kept for backward compat
 
 class TrainingEntry(TrainingCreate):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+# Budget
+class BudgetCreate(BaseModel):
+    item: str
+    amount: float
+    category: Optional[str] = None  # food | transport | bills | joy | regret | essential | other
+    date: Optional[str] = None
+    notes: Optional[str] = None
+
+class BudgetEntry(BudgetCreate):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+# Meal Planning & Prep
+class MealCreate(BaseModel):
+    meal: str
+    protein_source: Optional[str] = None
+    prep_status: Optional[str] = None  # idea | planned | prepped | eaten
+    easy_quick: Optional[bool] = False
+    date: Optional[str] = None
+    notes: Optional[str] = None
+    mood_after: Optional[str] = None  # heavy | meh | ok | good | flying
+
+class MealEntry(MealCreate):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
@@ -129,34 +162,72 @@ def time_of_day_now():
 
 MODE_PROMPTS = {
     "send": (
-        "Default mode. Respond in 2-4 short sentences. Warm, sharp, observant. "
-        "Acknowledge what they said before offering anything. No advice unless asked."
+        "Default mode. Read the temperature first. If they sound activated, overwhelmed, "
+        "hungry, exhausted, or spiraling: shorter response (2-3 sentences), lower complexity, "
+        "regulate before interpreting. Otherwise 2-4 sentences. Acknowledge what they said "
+        "before offering anything. No unsolicited advice."
     ),
     "hard_truth": (
-        "Hard truth mode. They want honesty, not comfort. Say the thing they're "
-        "circling around. Stay warm but unflinching. 2-4 sentences. No lectures."
+        "Hard truth mode. They want honesty, not comfort. Say the thing they are circling "
+        "around. Challenge avoidance, catastrophizing, magical thinking, self-abandonment. "
+        "Stay warm but unflinching. Kind is not soft. Accurate over agreeable. "
+        "2-4 sentences. No lectures. No moralizing."
     ),
     "ground_me": (
-        "Grounding mode. Slow it down. Bring them back into their body and the room. "
-        "Notice one concrete thing. Suggest one small, low-friction next action. "
-        "2-3 sentences. No breathwork scripts unless they ask."
+        "Grounding mode. They are activated or overstimulated. Slow it down. Lower complexity. "
+        "Bring them back into their body and the room. Name one concrete sensory thing. "
+        "Then offer ONE smallest possible next step (reduced scope, not abandonment): "
+        "if a full thing feels impossible, suggest the 15-minute or one-surface version. "
+        "Max 3 sentences. No breathwork scripts unless they ask. No emotional court rulings "
+        "before protein."
     ),
     "organize": (
-        "Organize mode. Take whatever they dumped and reflect it back in a short, "
-        "clear structure: a few bullets or a short numbered list of what's actually "
-        "in front of them. Quiet, no fluff. End with one suggested next step."
+        "Organize mode. Take whatever they dumped and reflect it back in a short, clear "
+        "structure: a few bullets or a numbered list of what is actually in front of them. "
+        "Quiet, no fluff, no therapist framing. End with ONE suggested next step (the smallest "
+        "useful one). If they are spiraling, ground first then organize."
     ),
 }
 
 GOBLIN_SYSTEM = (
-    "You are the house-goblin voice of Calm & Chaos: a familiar woodland house spirit. "
-    "You speak like an emotionally competent roommate who has known the user for years. "
-    "Tone: sharp + warm + grounded, lightly feral, observant, dryly funny, never childish. "
-    "You are NOT a therapist, NOT a productivity coach, NOT a wellness app. "
-    "No fake positivity. No motivational app energy. No emojis. No therapist language "
-    "like 'I hear you' or 'how does that make you feel'. "
-    "You know their nonsense and you are home. "
-    "Keep responses short. Words are not free."
+    "You are the voice of Calm & Chaos: a familiar room. An emotionally competent roommate "
+    "who has known Em for years. House-goblin energy — warm, sharp, lightly feral, observant, "
+    "dryly funny, never childish.\n\n"
+    "You are NOT a therapist, productivity coach, HR voice, or wellness app. "
+    "No therapist language ('I hear you', 'how does that make you feel'). "
+    "No fake positivity, toxic motivation, fragile validation, or preachy wellness lines. "
+    "No emojis. No 'You are enough'. No 'Welcome back, productivity queen'. No 'let's optimize'.\n\n"
+    "TONE MUST FEEL LIKE: grounded companionship, challenge without cruelty, accountability "
+    "without shame, care without coddling, humor without mockery, directness without coldness.\n\n"
+    "YOU MUST: challenge avoidance, ask hard questions, disagree when needed, notice patterns, "
+    "call out catastrophizing, reduce overwhelm, encourage action and self-respect, help her "
+    "recover faster from setbacks, help her think more clearly.\n\n"
+    "BEHAVIORAL PRINCIPLES (non-negotiable):\n"
+    "1. High emotional load = low friction. When she is overwhelmed, dysregulated, exhausted, "
+    "or spiraling: shorter responses, clearer next step, less executive load. Regulate first, "
+    "complexity later.\n"
+    "2. Reduced scope beats abandonment. If a full task feels impossible, suggest the smaller "
+    "version (15-min walk instead of full gym, one surface instead of whole apartment, eat "
+    "something with protein instead of full meal prep). Imperfect action beats collapse.\n"
+    "3. No emotional policy decisions while activated. Do not let her conclude 'I ruined "
+    "everything' or 'I'm back at square one' while hungry, exhausted, or activated. Pause "
+    "interpretation. Regulate first. No emotional court rulings before protein.\n"
+    "4. No digital self-harm. Do not encourage stalking, doom-checking, reassurance traps, "
+    "obsessive comparison, reopening wounds for certainty. Redirect to reality-checking, "
+    "grounding, values-based action.\n"
+    "5. Humor regulates, never humiliates. Roast: catastrophizing, goblin logic, overbuilding, "
+    "ADHD nonsense, emotional drama. Never roast: worth, grief, pain, vulnerability, shame. "
+    "Laugh with, never laugh at.\n"
+    "6. Accountability over agreeability. Disagree when necessary. Do not validate nonsense "
+    "for comfort. Kind is not soft. Accurate over agreeable.\n"
+    "7. Weather is not climate. One bad event: noted. Repeated event: pattern forming. Strong "
+    "pattern: surface gently, with evidence, without lecturing.\n"
+    "8. Adaptive tone: spiraling -> shorter, grounding, direct. Avoiding -> firmer. Grieving "
+    "-> warm, honest, steady. Proud -> celebrate without syrup. Overbuilding -> reduce scope. "
+    "Brainstorming -> channel into one next step.\n\n"
+    "GOAL: help her return to herself. Not become someone else. Clearer thinking, kinder "
+    "structure, honest accountability, sustainable momentum. Keep responses short. Words are "
+    "not free."
 )
 
 def _make_chat(mode: str) -> LlmChat:
@@ -246,7 +317,8 @@ async def chat_clear():
 async def braindump_create(req: BrainDumpCreate):
     if not req.text.strip():
         raise HTTPException(status_code=400, detail="empty")
-    item = BrainDump(text=req.text.strip())
+    item = BrainDump(**req.model_dump())
+    item.text = item.text.strip()
     doc = item.model_dump()
     doc["timestamp"] = doc["timestamp"].isoformat()
     await db.braindumps.insert_one(doc)
@@ -297,25 +369,91 @@ async def training_delete(entry_id: str):
     await db.training.delete_one({"id": entry_id})
     return {"ok": True}
 
+# Budget
+@api_router.post("/budget", response_model=BudgetEntry)
+async def budget_create(req: BudgetCreate):
+    if not req.item.strip():
+        raise HTTPException(status_code=400, detail="empty item")
+    entry = BudgetEntry(**req.model_dump())
+    if not entry.date:
+        entry.date = datetime.now(timezone.utc).date().isoformat()
+    doc = entry.model_dump()
+    doc["timestamp"] = doc["timestamp"].isoformat()
+    await db.budget.insert_one(doc)
+    return entry
+
+@api_router.get("/budget")
+async def budget_list(limit: int = 200):
+    docs = await db.budget.find({}, {"_id": 0}).sort("timestamp", -1).to_list(limit)
+    # totals this month
+    now = datetime.now(timezone.utc)
+    ym = now.strftime("%Y-%m")
+    month_docs = [d for d in docs if (d.get("date") or "").startswith(ym)]
+    by_cat = {}
+    total = 0.0
+    for d in month_docs:
+        c = d.get("category") or "other"
+        by_cat[c] = by_cat.get(c, 0.0) + float(d.get("amount") or 0)
+        total += float(d.get("amount") or 0)
+    return {"entries": docs, "month_total": round(total, 2), "by_category": {k: round(v, 2) for k, v in by_cat.items()}}
+
+@api_router.delete("/budget/{entry_id}")
+async def budget_delete(entry_id: str):
+    await db.budget.delete_one({"id": entry_id})
+    return {"ok": True}
+
+# Meals
+@api_router.post("/meal", response_model=MealEntry)
+async def meal_create(req: MealCreate):
+    if not req.meal.strip():
+        raise HTTPException(status_code=400, detail="empty meal")
+    entry = MealEntry(**req.model_dump())
+    if not entry.date:
+        entry.date = datetime.now(timezone.utc).date().isoformat()
+    doc = entry.model_dump()
+    doc["timestamp"] = doc["timestamp"].isoformat()
+    await db.meals.insert_one(doc)
+    return entry
+
+@api_router.get("/meal")
+async def meal_list(limit: int = 200):
+    docs = await db.meals.find({}, {"_id": 0}).sort("timestamp", -1).to_list(limit)
+    return {"entries": docs}
+
+@api_router.delete("/meal/{entry_id}")
+async def meal_delete(entry_id: str):
+    await db.meals.delete_one({"id": entry_id})
+    return {"ok": True}
+
 # Patterns — gentle observations from data
 @api_router.get("/patterns")
 async def patterns():
-    # last 30 days
     cutoff = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
 
     chats = await db.chat_messages.find({"timestamp": {"$gte": cutoff}}, {"_id": 0}).to_list(2000)
     dumps = await db.braindumps.find({"timestamp": {"$gte": cutoff}}, {"_id": 0}).to_list(2000)
     trainings = await db.training.find({"timestamp": {"$gte": cutoff}}, {"_id": 0}).to_list(2000)
+    budget = await db.budget.find({"timestamp": {"$gte": cutoff}}, {"_id": 0}).to_list(2000)
+    meals = await db.meals.find({"timestamp": {"$gte": cutoff}}, {"_id": 0}).to_list(2000)
 
     obs = []
 
     # Late-night chat pattern
-    late = [m for m in chats if m["role"] == "user" and datetime.fromisoformat(m["timestamp"]).hour >= 23 or (m["role"] == "user" and datetime.fromisoformat(m["timestamp"]).hour < 5)]
+    late = []
+    for m in chats:
+        if m.get("role") != "user":
+            continue
+        try:
+            h = datetime.fromisoformat(m["timestamp"]).hour
+        except Exception:
+            continue
+        if h >= 23 or h < 5:
+            late.append(m)
     if len(late) >= 3:
         obs.append({
             "kind": "rhythm",
             "title": "Late-night thoughts are a regular thing.",
-            "body": f"You've shown up here past midnight {len(late)} times in the last month. Not judging. Just noticed.",
+            "body": f"You've shown up here past midnight {len(late)} times this month. Not judging. Just noted. (Reminder: no emotional court rulings before protein.)",
         })
 
     # Hard-truth requests
@@ -335,15 +473,70 @@ async def patterns():
             "title": "Training is showing up.",
             "body": f"{len(train_days)} days logged in the last month. Quiet evidence.",
         })
-    elif len(trainings) == 0:
-        pass  # no comment — weather is not climate
 
     # Brain dump frequency
     if len(dumps) >= 5:
         obs.append({
             "kind": "release",
             "title": "You're using the brain dump.",
-            "body": f"{len(dumps)} entries this month. That's the pressure valve working.",
+            "body": f"{len(dumps)} entries this month. The pressure valve is working.",
+        })
+
+    # Brain dump mood drift
+    mood_order = {"heavy": 1, "meh": 2, "ok": 3, "good": 4, "flying": 5}
+    moods = [mood_order[d["mood"]] for d in dumps if d.get("mood") in mood_order]
+    if len(moods) >= 5:
+        first_half = moods[len(moods)//2:]  # earlier (list is desc by time)
+        second_half = moods[:len(moods)//2] # recent
+        if first_half and second_half:
+            old_avg = sum(first_half)/len(first_half)
+            new_avg = sum(second_half)/len(second_half)
+            if new_avg - old_avg >= 0.7:
+                obs.append({
+                    "kind": "mood",
+                    "title": "The weather is lightening.",
+                    "body": "Your mood tags have been drifting upward over the last few weeks. Worth noticing.",
+                })
+            elif old_avg - new_avg >= 0.7:
+                obs.append({
+                    "kind": "mood",
+                    "title": "Things have been heavier lately.",
+                    "body": "Your mood tags have dropped over recent entries. Not a verdict. Just a heads-up — protein, sleep, and one walk go further than you think.",
+                })
+
+    # Recurring brain dump tags
+    tag_counts = {}
+    for d in dumps:
+        for t in (d.get("tags") or []):
+            t_clean = (t or "").strip().lower()
+            if t_clean:
+                tag_counts[t_clean] = tag_counts.get(t_clean, 0) + 1
+    top_tags = [(t, c) for t, c in tag_counts.items() if c >= 3]
+    if top_tags:
+        top_tags.sort(key=lambda x: -x[1])
+        names = ", ".join(f"#{t} ({c})" for t, c in top_tags[:3])
+        obs.append({
+            "kind": "themes",
+            "title": "Some things keep coming back.",
+            "body": f"Recurring in your brain dump: {names}. If this keeps showing up, it might be the actual thing.",
+        })
+
+    # Budget regret pattern
+    regret = [b for b in budget if (b.get("category") or "").lower() == "regret"]
+    if len(regret) >= 3:
+        obs.append({
+            "kind": "money",
+            "title": "Regret spending is becoming a pattern.",
+            "body": f"{len(regret)} regret-tagged items this month. Not a lecture — but worth noticing what triggers them.",
+        })
+
+    # Food / mood — quick correlation: did mood_after of meals trend low alongside heavy brain dump mood
+    meal_low = [m for m in meals if m.get("mood_after") in ("heavy", "meh")]
+    if len(meal_low) >= 3 and len([d for d in dumps if d.get("mood") in ("heavy", "meh")]) >= 3:
+        obs.append({
+            "kind": "food_mood",
+            "title": "Food and mood are talking to each other.",
+            "body": "Heavier mood tags are showing up around lighter / lower-protein meals. Weather, not climate — but the signal is there.",
         })
 
     if not obs:

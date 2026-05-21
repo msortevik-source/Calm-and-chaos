@@ -60,7 +60,7 @@ export default function ConversationPage() {
           <p className="text-moss-200 italic font-body">Empty room. Drop something and we'll start.</p>
         )}
         {messages.map(m => (
-          <div key={m.id} className={`rounded-2xl p-5 ${m.role === "user" ? "bg-moss-800/50 border border-moss-700" : "bg-amber-soft border border-amber/30"}`}>
+          <div key={m.id} className={`rounded-2xl p-5 ${m.role === "user" ? "warm-card" : "warm-card border-amber/30"}`} style={m.role === "assistant" ? { background: "linear-gradient(180deg, rgba(212,163,115,0.10) 0%, rgba(43,47,42,0.85) 100%)" } : undefined}>
             <div className={`text-[10px] uppercase tracking-[0.25em] mb-2 ${m.role === "user" ? "text-moss-200/70" : "text-amber/90"}`}>
               {m.role === "user" ? `you${m.mode && m.mode !== "send" ? ` · ${m.mode.replace("_", " ")}` : ""}` : "the goblin"}
             </div>

@@ -10,8 +10,9 @@ html, body, #root {
 
 body {
   margin: 0;
-  background-color: #151716;
-  color: #E8E3D9;
+  /* Warmer base — soft black with subtle moss undertone, not void */
+  background-color: #1A1C19;
+  color: #EAE0D0;
   font-family: 'Manrope', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -21,24 +22,25 @@ body {
 
 @layer base {
   :root {
-    --background: 130 6% 9%;
-    --foreground: 39 27% 88%;
-    --card: 130 6% 12%;
-    --card-foreground: 39 27% 88%;
-    --popover: 130 6% 12%;
-    --popover-foreground: 39 27% 88%;
-    --primary: 145 16% 21%;
-    --primary-foreground: 39 27% 88%;
-    --secondary: 130 6% 15%;
-    --secondary-foreground: 39 27% 88%;
-    --muted: 130 6% 15%;
-    --muted-foreground: 105 3% 56%;
+    /* Warmer palette — moss undertones + soft amber depth */
+    --background: 90 6% 10%;
+    --foreground: 36 32% 87%;
+    --card: 100 5% 13%;
+    --card-foreground: 36 32% 87%;
+    --popover: 100 5% 13%;
+    --popover-foreground: 36 32% 87%;
+    --primary: 130 16% 23%;
+    --primary-foreground: 36 32% 87%;
+    --secondary: 100 5% 16%;
+    --secondary-foreground: 36 32% 87%;
+    --muted: 100 5% 16%;
+    --muted-foreground: 35 12% 60%;
     --accent: 28 51% 64%;
-    --accent-foreground: 130 8% 10%;
+    --accent-foreground: 100 8% 12%;
     --destructive: 8 60% 45%;
-    --destructive-foreground: 39 27% 88%;
-    --border: 130 6% 18%;
-    --input: 130 6% 16%;
+    --destructive-foreground: 36 32% 87%;
+    --border: 100 5% 19%;
+    --input: 100 5% 17%;
     --ring: 28 51% 64%;
     --radius: 1rem;
   }
@@ -49,26 +51,29 @@ body {
   h1, h2, h3, h4 { font-family: 'Spectral', serif; font-weight: 400; letter-spacing: -0.01em; }
 }
 
-/* Grain / noise texture overlay — gentle, lived-in */
-.grain-overlay::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: 1;
-  opacity: 0.06;
-  mix-blend-mode: overlay;
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.92 0 0 0 0 0.89 0 0 0 0 0.85 0 0 0 0.35 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
-}
-
-/* Subtle vignette */
-.vignette::after {
+/* Warm depth — slow radial glow behind everything to take the void out of dark mode */
+.warm-depth::before {
   content: "";
   position: fixed;
   inset: 0;
   pointer-events: none;
   z-index: 0;
-  background: radial-gradient(ellipse at center, transparent 40%, rgba(0,0,0,0.45) 100%);
+  background:
+    radial-gradient(80% 50% at 18% 0%, rgba(212, 163, 115, 0.07) 0%, transparent 60%),
+    radial-gradient(60% 60% at 100% 100%, rgba(98, 128, 105, 0.08) 0%, transparent 65%),
+    radial-gradient(120% 90% at 50% 50%, rgba(46, 56, 48, 0.12) 0%, transparent 80%);
+}
+
+/* Subtle grain overlay */
+.grain-overlay::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  opacity: 0.055;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.95 0 0 0 0 0.88 0 0 0 0 0.76 0 0 0 0.45 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
 }
 
 /* Auto-expanding textarea */
@@ -81,13 +86,13 @@ body {
 /* Scrollbar */
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #2E3330; border-radius: 8px; }
-::-webkit-scrollbar-thumb:hover { background: #3E4A43; }
+::-webkit-scrollbar-thumb { background: #3A3F3A; border-radius: 8px; }
+::-webkit-scrollbar-thumb:hover { background: #4A524A; }
 
 /* Selection */
-::selection { background: rgba(212, 163, 115, 0.30); color: #E8E3D9; }
+::selection { background: rgba(212, 163, 115, 0.30); color: #EAE0D0; }
 
-/* Soft underline on hover for nav items */
+/* Soft nav underline */
 .nav-link {
   position: relative;
   transition: color 0.25s ease;
@@ -102,19 +107,25 @@ body {
   transition: right 0.3s ease;
 }
 .nav-link:hover::after, .nav-link.active::after { right: 0; }
-.nav-link.active { color: #E8E3D9; }
+.nav-link.active { color: #EAE0D0; }
 
-/* Pill button with quiet hover */
+/* Pills */
 .pill-btn {
   border: 1px solid rgba(212,163,115,0.30);
-  color: #E8E3D9;
+  color: #EAE0D0;
   background: transparent;
-  transition: background-color 0.25s ease, border-color 0.25s ease, transform 0.2s ease;
+  transition: background-color 0.25s ease, border-color 0.25s ease, transform 0.2s ease, color 0.25s ease;
 }
-.pill-btn:hover { background: rgba(212,163,115,0.10); border-color: rgba(212,163,115,0.55); }
+.pill-btn:hover { background: rgba(212,163,115,0.12); border-color: rgba(212,163,115,0.55); }
 .pill-btn:active { transform: translateY(1px); }
-.pill-btn.primary { background: #2C3E35; border-color: #2C3E35; }
-.pill-btn.primary:hover { background: #364c41; }
+.pill-btn.primary { background: #2E4036; border-color: #2E4036; }
+.pill-btn.primary:hover { background: #384D41; }
 
-/* Layered content above grain */
+/* Warm card surface */
+.warm-card {
+  background: linear-gradient(180deg, rgba(43, 47, 42, 0.85) 0%, rgba(33, 37, 33, 0.85) 100%);
+  border: 1px solid #2F352F;
+  box-shadow: 0 1px 0 rgba(212,163,115,0.04) inset, 0 0 0 1px rgba(212,163,115,0.02);
+}
+
 .content-layer { position: relative; z-index: 2; }

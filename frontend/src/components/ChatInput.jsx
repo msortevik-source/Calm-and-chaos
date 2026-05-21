@@ -24,7 +24,7 @@ export default function ChatInput({ onSubmit, busy, compact = false, placeholder
 
   return (
     <div className="w-full" data-testid="chat-input-container">
-      <div className="rounded-3xl border border-moss-700 bg-moss-800/70 backdrop-blur-sm p-4 md:p-5 transition-colors focus-within:border-amber/50">
+      <div className="rounded-3xl warm-card p-4 md:p-5 transition-colors focus-within:border-amber/50">
         <textarea
           data-testid="chat-textarea"
           className="auto-grow w-full bg-transparent text-moss-50 placeholder-moss-200/60 outline-none resize-none font-body text-base leading-relaxed"
