@@ -1,0 +1,114 @@
+{
+  "app_name": "Calm & Chaos",
+  "theme": "dark",
+  "archetype": "Organic & Earthy (Dark/Scandinavian interpretation)",
+  "emotional_feeling": "I know your nonsense. You're home. Calm, warm, grounded, lightly feral, observant, emotionally intelligent, low stimulation, familiar.",
+  "colors": {
+    "background": "#151716",
+    "surface": "#1E2220",
+    "surface_elevated": "#262B28",
+    "primary": "#2C3E35",
+    "primary_foreground": "#E8E3D9",
+    "accent_amber": "#D4A373",
+    "accent_amber_muted": "rgba(212, 163, 115, 0.15)",
+    "text_main": "#E8E3D9",
+    "text_muted": "#8A908D",
+    "border": "#2E3330",
+    "forbidden_colors": [
+      "#9D4CDD",
+      "#1B93A4",
+      "purple",
+      "violet",
+      "gradients on dark surfaces"
+    ]
+  },
+  "typography": {
+    "headings": {
+      "family": "Spectral, serif",
+      "weight": "400",
+      "character": "Warm, characterful, lived-in, literary"
+    },
+    "body": {
+      "family": "Manrope, sans-serif",
+      "weight": "400",
+      "character": "Distinctive humanist sans, low friction, readable, quiet"
+    },
+    "forbidden_fonts": [
+      "Inter",
+      "Roboto",
+      "Open Sans",
+      "Syne"
+    ]
+  },
+  "layout_and_spacing": {
+    "spacing_scale": "Generous. Use Tailwind p-8, p-12, gap-8. Prioritize negative space to give thoughts room to breathe.",
+    "edges": "No harsh edges. Use rounded-2xl or rounded-3xl for major containers, inputs, and cards.",
+    "asymmetry": "Encouraged. Offset containers slightly or use varying column spans to feel less rigid and more human.",
+    "texture": "Global fixed overlay with subtle CSS noise/grain (pointer-events-none, opacity-5) to create a lived-in, non-digital feel."
+  },
+  "components": {
+    "chat_input": {
+      "style": "Auto-expanding, deeply rounded (rounded-3xl), soft internal shading or border, warm surface background.",
+      "buttons": "Four distinct action modes: 'Send', 'Hard truth', 'Ground me', 'Organize my brain'. Style as quiet pills (rounded-full) with subtle accent_amber borders and low-opacity hover states."
+    },
+    "cards": {
+      "style": "Solid dark background (surface_elevated), 1px subtle border, no heavy drop shadows, generous internal padding."
+    },
+    "icons": {
+      "library": "lucide-react",
+      "rules": "No emojis allowed anywhere in the UI. Use muted icon colors to keep visual stimulation low."
+    }
+  },
+  "pages": {
+    "home": {
+      "greeting_area": "Time-of-day-aware heading. Tone: sharp + warm + grounded (e.g., 'Coffee first or catastrophe first?'). Use Spectral font, large and commanding but quiet (text-4xl or 5xl).",
+      "calendar_snapshot": "Small, quiet orientation area on the side. Shows Google Calendar events, today's plans, low pressure.",
+      "conversation_snapshot": "Recent thought + recent response. Provides continuity without the visual weight of a giant chat history.",
+      "conversation_input": "Central 'drop thought here' area. Low friction entry point into the system."
+    },
+    "conversation": {
+      "description": "Full multi-turn chat page. GPT-5.2 powered. Feels like a safe, familiar room rather than a sterile messaging app."
+    },
+    "brain_dump": {
+      "description": "Low-friction thought drop. Timestamped entries with zero structural demands."
+    },
+    "training": {
+      "description": "Log for running (pace/HR/time) and strength (weight/reps/notes). Displayed softly via a weekly template (Mon/Wed/Fri)."
+    },
+    "patterns": {
+      "description": "Gentle observations from data, presented as quiet insights rather than aggressive analytics charts."
+    }
+  },
+  "media": {
+    "images": [
+      {
+        "url": "https://static.prod-images.emergentagent.com/jobs/64b213a2-2644-44c8-ae48-48a98dadb0b1/images/8a599123d1857f0dbcee724d01d702a0fa9fb93362b870f7150de26cdeaef48d.png",
+        "category": "hero_abstract_background",
+        "description": "Abstract dark moss green and soft amber watercolor wash, moody scandinavian forest at night."
+      },
+      {
+        "url": "https://images.pexels.com/photos/11553615/pexels-photo-11553615.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "category": "texture_reference_forest",
+        "description": "Eerie misty forest showcasing moss-covered tree trunks, dark and mysterious atmosphere."
+      },
+      {
+        "url": "https://images.unsplash.com/photo-1636501034642-7b60be346588?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2NzB8MHwxfHNlYXJjaHwxfHxibGFjayUyMGNvZmZlZSUyMGNvenklMjBkYXJrfGVufDB8fHx8MTc3OTM4MzAzNXww&ixlib=rb-4.1.0&q=85",
+        "category": "mood_reference_coffee",
+        "description": "A cup of coffee on a table, warm cozy dark aesthetic."
+      }
+    ],
+    "usage_instructions": "Use images highly selectively. For backgrounds, use extremely low opacity (e.g., opacity-5 to opacity-10) with a blend mode or overlay to ensure text readability and maintain the 'low stimulation' constraint."
+  },
+  "testing": {
+    "rules": "All interactive and key informational elements MUST include a data-testid attribute in kebab-case, role-based format (e.g., data-testid='chat-submit-button', data-testid='ground-me-button')."
+  },
+  "instructions_to_main_agent": [
+    "Configure Tailwind (tailwind.config.js) with the exact custom color palette provided (background, surface, primary moss green, text colors).",
+    "Import Spectral and Manrope fonts via Google Fonts in index.css. Apply Spectral to headings and Manrope to the body.",
+    "Implement a CSS noise overlay class in index.css and apply it to the main layout wrapper to ensure a consistent, subtle lived-in texture.",
+    "Ensure all backgrounds are solid. Gradients are strictly forbidden per the design rules.",
+    "Build the home page using an asymmetric grid (e.g., a bento layout where the input and greeting take primary focus, and snapshots take secondary side slots).",
+    "Use standard React .js syntax. Do not use TypeScript (.tsx).",
+    "Use lucide-react for all icons and strictly remove any emojis from text elements or mocked data."
+  ]
+}
