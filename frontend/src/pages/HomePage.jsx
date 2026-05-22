@@ -1,5 +1,6 @@
 import { useState } from "react";
 import Greeting from "../components/Greeting";
+import Goblin from "../components/Goblin";
 import CalendarSnapshot from "../components/CalendarSnapshot";
 import ConversationSnapshot from "../components/ConversationSnapshot";
 import ChatInput from "../components/ChatInput";
@@ -30,7 +31,15 @@ export default function HomePage() {
 
   return (
     <div className="px-6 md:px-12 lg:px-20 py-10 md:py-16 max-w-7xl mx-auto" data-testid="home-page">
-      <Greeting />
+      <div className="flex items-end gap-6 md:gap-10 flex-wrap md:flex-nowrap">
+        <div className="relative shrink-0 hidden sm:block" data-testid="goblin-area">
+          <div className="goblin-glow" />
+          <Goblin size={220} />
+        </div>
+        <div className="flex-1 min-w-0">
+          <Greeting />
+        </div>
+      </div>
 
       <div className="mt-12 md:mt-16 grid grid-cols-1 lg:grid-cols-12 gap-6 md:gap-8">
         {/* Chat input — primary, asymmetric large slot */}
