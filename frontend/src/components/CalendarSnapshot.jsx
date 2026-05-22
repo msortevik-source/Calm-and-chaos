@@ -7,7 +7,8 @@ function fmtTime(iso, all_day) {
   if (all_day) return "all day";
   try {
     const d = new Date(iso);
-    return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+    // Use the user's actual locale so Norway gets 14:00 not 2:00 PM
+    return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   } catch { return ""; }
 }
 
@@ -75,7 +76,12 @@ export default function CalendarSnapshot() {
               </div>
               <div className="flex-1 min-w-0">
                 <div className="text-moss-50 text-sm leading-snug truncate">{ev.summary}</div>
-                {ev.location && <div className="text-moss-200 text-xs truncate">{ev.location}</div>}
+                <div className="text-moss-200 text-xs truncate flex gap-2">
+                  {ev.location && <span>{ev.location}</span>}
+                  {ev.calendar && !ev.calendar_primary && (
+                    <span className="text-moss-200/60 italic">· {ev.calendar}</span>
+                  )}
+                </div>
               </div>
             </li>
           ))}

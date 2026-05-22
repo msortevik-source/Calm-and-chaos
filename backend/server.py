@@ -897,27 +897,48 @@ async def calendar_today():
         service = build("calendar", "v3", credentials=creds, cache_discovery=False)
         now = datetime.now(timezone.utc)
         end = (now + timedelta(days=2)).replace(hour=23, minute=59, second=59)
-        resp = service.events().list(
-            calendarId="primary",
-            timeMin=now.isoformat(),
-            timeMax=end.isoformat(),
-            maxResults=20,
-            singleEvents=True,
-            orderBy="startTime",
-        ).execute()
-        events = []
-        for ev in resp.get("items", []):
-            start = ev.get("start", {})
-            end_t = ev.get("end", {})
-            events.append({
-                "id": ev.get("id"),
-                "summary": ev.get("summary", "(untitled)"),
-                "start": start.get("dateTime") or start.get("date"),
-                "end": end_t.get("dateTime") or end_t.get("date"),
-                "all_day": "date" in start,
-                "location": ev.get("location"),
-            })
-        return {"linked": True, "events": events}
+
+        # Pull from ALL calendars she has access to, not just primary
+        cal_list = service.calendarList().list().execute().get("items", [])
+
+        all_events = []
+        for cal in cal_list:
+            cal_id = cal.get("id")
+            cal_name = cal.get("summaryOverride") or cal.get("summary") or cal_id
+            is_primary = cal.get("primary", False)
+            try:
+                resp = service.events().list(
+                    calendarId=cal_id,
+                    timeMin=now.isoformat(),
+                    timeMax=end.isoformat(),
+                    maxResults=20,
+                    singleEvents=True,
+                    orderBy="startTime",
+                ).execute()
+            except Exception:
+                logging.exception(f"calendar fetch failed for {cal_id}")
+                continue
+            for ev in resp.get("items", []):
+                start = ev.get("start", {})
+                end_t = ev.get("end", {})
+                all_events.append({
+                    "id": f"{cal_id}|{ev.get('id')}",
+                    "summary": ev.get("summary", "(untitled)"),
+                    "start": start.get("dateTime") or start.get("date"),
+                    "end": end_t.get("dateTime") or end_t.get("date"),
+                    "all_day": "date" in start,
+                    "location": ev.get("location"),
+                    "calendar": cal_name,
+                    "calendar_primary": is_primary,
+                })
+
+        # Sort by start time
+        def sort_key(e):
+            s = e.get("start") or ""
+            return s
+        all_events.sort(key=sort_key)
+
+        return {"linked": True, "events": all_events[:30]}
     except Exception as e:
         logging.exception("calendar fetch failed")
         return {"linked": False, "events": [], "error": str(e)}
