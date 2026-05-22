@@ -888,6 +888,60 @@ async def _get_creds():
             return None
     return creds
 
+async def _get_muted_calendar_ids() -> set:
+    doc = await db.calendar_prefs.find_one({"user_id": SINGLE_USER_ID}, {"_id": 0}) or {}
+    return set(doc.get("muted_ids", []))
+
+@api_router.get("/calendar/calendars")
+async def calendar_list():
+    creds = await _get_creds()
+    if not creds:
+        return {"linked": False, "calendars": []}
+    try:
+        service = build("calendar", "v3", credentials=creds, cache_discovery=False)
+        cal_list = service.calendarList().list().execute().get("items", [])
+        muted = await _get_muted_calendar_ids()
+        out = []
+        for c in cal_list:
+            cid = c.get("id")
+            out.append({
+                "id": cid,
+                "name": c.get("summaryOverride") or c.get("summary") or cid,
+                "primary": c.get("primary", False),
+                "access": c.get("accessRole"),
+                "muted": cid in muted,
+            })
+        # Sort: primary first, then owner, then alphabetical
+        access_rank = {"owner": 0, "writer": 1, "reader": 2, "freeBusyReader": 3}
+        out.sort(key=lambda c: (
+            0 if c["primary"] else 1,
+            access_rank.get(c["access"], 99),
+            (c["name"] or "").lower(),
+        ))
+        return {"linked": True, "calendars": out}
+    except Exception as e:
+        logging.exception("calendar list failed")
+        return {"linked": False, "calendars": [], "error": str(e)}
+
+class CalendarMuteRequest(BaseModel):
+    calendar_id: str
+    muted: bool
+
+@api_router.post("/calendar/mute")
+async def calendar_mute(req: CalendarMuteRequest):
+    doc = await db.calendar_prefs.find_one({"user_id": SINGLE_USER_ID}, {"_id": 0}) or {"user_id": SINGLE_USER_ID, "muted_ids": []}
+    muted = set(doc.get("muted_ids", []))
+    if req.muted:
+        muted.add(req.calendar_id)
+    else:
+        muted.discard(req.calendar_id)
+    await db.calendar_prefs.update_one(
+        {"user_id": SINGLE_USER_ID},
+        {"$set": {"muted_ids": list(muted)}},
+        upsert=True,
+    )
+    return {"ok": True, "muted_ids": list(muted)}
+
 @api_router.get("/calendar/today")
 async def calendar_today():
     creds = await _get_creds()
@@ -898,12 +952,14 @@ async def calendar_today():
         now = datetime.now(timezone.utc)
         end = (now + timedelta(days=2)).replace(hour=23, minute=59, second=59)
 
-        # Pull from ALL calendars she has access to, not just primary
         cal_list = service.calendarList().list().execute().get("items", [])
+        muted = await _get_muted_calendar_ids()
 
         all_events = []
         for cal in cal_list:
             cal_id = cal.get("id")
+            if cal_id in muted:
+                continue
             cal_name = cal.get("summaryOverride") or cal.get("summary") or cal_id
             is_primary = cal.get("primary", False)
             try:
@@ -932,12 +988,7 @@ async def calendar_today():
                     "calendar_primary": is_primary,
                 })
 
-        # Sort by start time
-        def sort_key(e):
-            s = e.get("start") or ""
-            return s
-        all_events.sort(key=sort_key)
-
+        all_events.sort(key=lambda e: e.get("start") or "")
         return {"linked": True, "events": all_events[:30]}
     except Exception as e:
         logging.exception("calendar fetch failed")
