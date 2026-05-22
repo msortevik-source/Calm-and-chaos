@@ -18,10 +18,10 @@ function timeOfDay() {
 }
 
 const MOOD = {
-  morning:    { filter: "brightness(1.02) saturate(1.05) sepia(0.08)", caption: "slow start" },
-  midday:     { filter: "brightness(1.0) saturate(1.0)",                 caption: "" },
-  evening:    { filter: "brightness(0.96) saturate(1.08) sepia(0.18) hue-rotate(-6deg)", caption: "settling" },
-  late_night: { filter: "brightness(0.82) saturate(0.85) hue-rotate(8deg) contrast(1.05)", caption: "still up" },
+  morning:    { filter: "brightness(1.02) saturate(1.05) sepia(0.06)",                       caption: "slow start", sprite: "/goblin-morning.png" },
+  midday:     { filter: "brightness(1.0) saturate(1.0)",                                      caption: "",            sprite: "/goblin.png" },
+  evening:    { filter: "brightness(0.96) saturate(1.08) sepia(0.14) hue-rotate(-6deg)",      caption: "settling",    sprite: "/goblin-evening.png" },
+  late_night: { filter: "brightness(0.85) saturate(0.85) hue-rotate(8deg) contrast(1.05)",    caption: "still up",    sprite: "/goblin-late_night.png" },
 };
 
 export default function Goblin({ size = 200, className = "" }) {
@@ -70,7 +70,7 @@ export default function Goblin({ size = 200, className = "" }) {
       <div className="goblin-breathe">
         <div className="goblin-sway">
           <img
-            src="/goblin.png"
+            src={m.sprite}
             alt="emotional support goblin"
             draggable={false}
             style={{
@@ -80,7 +80,7 @@ export default function Goblin({ size = 200, className = "" }) {
               userSelect: "none",
               transformOrigin: "50% 100%",
               transform: blinking ? "scaleY(0.985)" : "scaleY(1)",
-              transition: "transform 90ms ease-in-out",
+              transition: "transform 90ms ease-in-out, opacity 1.2s ease",
             }}
           />
         </div>
