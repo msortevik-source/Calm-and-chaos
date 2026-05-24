@@ -19,14 +19,25 @@ export const getTemplate = () => api.get("/training/template").then(r => r.data)
 export const listTraining = () => api.get("/training").then(r => r.data);
 export const createTraining = (payload) => api.post("/training", payload).then(r => r.data);
 export const deleteTraining = (id) => api.delete(`/training/${id}`).then(r => r.data);
+export const stravaStatus = () => api.get("/strava/status").then(r => r.data);
+export const stravaLoginUrl = () => api.get("/oauth/strava/login").then(r => r.data);
+export const stravaImport = (payload = {}) => api.post("/strava/import", payload).then(r => r.data);
+export const stravaUnlink = () => api.post("/strava/unlink").then(r => r.data);
 
 export const listBudget = () => api.get("/budget").then(r => r.data);
 export const createBudget = (payload) => api.post("/budget", payload).then(r => r.data);
 export const deleteBudget = (id) => api.delete(`/budget/${id}`).then(r => r.data);
+export const getBudgetV1 = (month) => api.get(`/budget/v1${month ? `?month=${month}` : ""}`).then(r => r.data);
+export const saveBudgetSetup = (payload) => api.put("/budget/v1/setup", payload).then(r => r.data);
+export const createSpending = (payload) => api.post("/budget/v1/spending", payload).then(r => r.data);
+export const markSpendingCheckin = (payload) => api.post("/budget/v1/checkin", payload).then(r => r.data);
+export const deleteSpending = (id) => api.delete(`/budget/v1/spending/${id}`).then(r => r.data);
 
 export const listMeals = () => api.get("/meal").then(r => r.data);
 export const createMeal = (payload) => api.post("/meal", payload).then(r => r.data);
 export const deleteMeal = (id) => api.delete(`/meal/${id}`).then(r => r.data);
+export const getFoodV1 = (weekStart) => api.get(`/food/v1${weekStart ? `?week_start=${weekStart}` : ""}`).then(r => r.data);
+export const saveFoodV1 = (payload) => api.put("/food/v1", payload).then(r => r.data);
 
 export const getPatterns = () => api.get("/patterns").then(r => r.data);
 

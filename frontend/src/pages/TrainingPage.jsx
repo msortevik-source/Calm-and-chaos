@@ -1,164 +1,406 @@
-import { useEffect, useState } from "react";
-import { getTemplate, listTraining, createTraining, deleteTraining, MOODS } from "../lib/api";
+import { useEffect, useMemo, useState } from "react";
+import {
+  getTemplate,
+  listTraining,
+  createTraining,
+  deleteTraining,
+  stravaImport,
+  stravaLoginUrl,
+  stravaStatus,
+  stravaUnlink,
+} from "../lib/api";
 import DiscussButton from "../components/DiscussButton";
-import { Trash2, Activity, Footprints, Dumbbell, NotebookPen } from "lucide-react";
+import { Activity, Dumbbell, Footprints, Link2, RefreshCw, Save, Trash2, Unlink } from "lucide-react";
 import { toast } from "sonner";
 
-const DAY_ORDER = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
+const DAY_ORDER = ["monday", "wednesday", "friday"];
+const SESSION_OPTIONS = [
+  { id: "monday", label: "Monday", sub: "Easy run + legs/glutes" },
+  { id: "wednesday", label: "Wednesday", sub: "Intervals + upper/core" },
+  { id: "friday", label: "Friday", sub: "Easy run + lower/upper" },
+  { id: "long", label: "Long run", sub: "Saturday or Sunday" },
+];
 
 const todayIso = () => new Date().toISOString().slice(0, 10);
+const weekdayKey = () => new Date().toLocaleDateString("en-US", { weekday: "long" }).toLowerCase();
+const inputCls = "bg-moss-800/60 border border-moss-700 rounded-xl px-3 py-2 text-sm text-moss-50 placeholder-moss-200/50 outline-none focus:border-amber/50 transition-colors";
+
+function defaultSession() {
+  const day = weekdayKey();
+  if (DAY_ORDER.includes(day)) return day;
+  if (day === "saturday" || day === "sunday") return "long";
+  return "monday";
+}
+
+function sessionDay(session, longRunDay) {
+  return session === "long" ? longRunDay : session;
+}
+
+function lastForExercise(entries, exerciseName) {
+  return entries.find((entry) => (
+    entry.kind === "strength" &&
+    (entry.exercise || "").toLowerCase() === exerciseName.toLowerCase() &&
+    (entry.weight_kg || entry.reps)
+  ));
+}
+
+function lastRun(entries, label) {
+  const needle = (label || "").toLowerCase();
+  return entries.find((entry) => (
+    entry.kind === "run" &&
+    (!needle || (entry.session_name || "").toLowerCase().includes(needle.split(" ")[0]))
+  ));
+}
+
+function ExerciseRow({ exercise, value, previous, onChange }) {
+  return (
+    <div className="rounded-2xl border border-moss-700/70 bg-moss-800/35 p-4">
+      <div className="flex flex-col md:flex-row md:items-start justify-between gap-3">
+        <div>
+          <h3 className="font-heading text-lg text-moss-50">{exercise.name}</h3>
+          <p className="text-xs text-moss-200 mt-1">{exercise.sets}x{exercise.reps}</p>
+          <p className="text-sm text-moss-200 mt-2">
+            Last: {previous ? `${previous.weight_kg || "-"} kg x ${previous.reps || previous.rep_count || "-"}` : "no log yet"}
+          </p>
+        </div>
+        <div className="grid grid-cols-2 gap-2 w-full md:w-[220px]">
+          <input
+            type="number"
+            step="0.5"
+            data-testid={`exercise-weight-${exercise.name}`}
+            placeholder="kg"
+            value={value.weight_kg ?? ""}
+            onChange={(e) => onChange(exercise.name, "weight_kg", e.target.value)}
+            className={inputCls}
+          />
+          <input
+            type="number"
+            data-testid={`exercise-reps-${exercise.name}`}
+            placeholder="reps"
+            value={value.reps ?? ""}
+            onChange={(e) => onChange(exercise.name, "reps", e.target.value)}
+            className={inputCls}
+          />
+        </div>
+      </div>
+      <input
+        data-testid={`exercise-note-${exercise.name}`}
+        placeholder="optional note"
+        value={value.notes || ""}
+        onChange={(e) => onChange(exercise.name, "notes", e.target.value)}
+        className={inputCls + " w-full mt-3"}
+      />
+    </div>
+  );
+}
 
 export default function TrainingPage() {
   const [template, setTemplate] = useState({});
   const [entries, setEntries] = useState([]);
-  const [kind, setKind] = useState("run");
-  const [form, setForm] = useState({ date: todayIso() });
+  const [session, setSession] = useState(defaultSession());
+  const [longRunDay, setLongRunDay] = useState(weekdayKey() === "sunday" ? "sunday" : "saturday");
+  const [date, setDate] = useState(todayIso());
+  const [exerciseLog, setExerciseLog] = useState({});
+  const [runLog, setRunLog] = useState({});
   const [busy, setBusy] = useState(false);
+  const [strava, setStrava] = useState({ configured: false, linked: false });
+  const [stravaBusy, setStravaBusy] = useState(false);
+
+  const selectedDay = sessionDay(session, longRunDay);
+  const workout = useMemo(() => template[selectedDay] || {}, [template, selectedDay]);
+  const exercises = useMemo(() => workout.exercises || [], [workout]);
+  const run = useMemo(() => workout.run || null, [workout]);
+
+  const sortedEntries = useMemo(
+    () => [...entries].sort((a, b) => String(b.timestamp || b.date || "").localeCompare(String(a.timestamp || a.date || ""))),
+    [entries],
+  );
 
   const load = async () => {
-    const [t, e] = await Promise.all([getTemplate(), listTraining()]);
-    setTemplate(t.template || {});
-    setEntries(e.entries || []);
+    try {
+      const [t, e, s] = await Promise.all([getTemplate(), listTraining(), stravaStatus().catch(() => null)]);
+      setTemplate(t.template || {});
+      setEntries(e.entries || []);
+      if (s) setStrava(s);
+    } catch {
+      const t = await getTemplate().catch(() => ({ template: {} }));
+      setTemplate(t.template || {});
+      setEntries([]);
+    }
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("strava") === "linked") toast("Strava linked. Tiny victory parade, very restrained.");
+    if (params.get("strava") === "error") toast("Strava got weird. Try linking again.");
+    load();
+  }, []);
 
-  const submit = async () => {
-    const payload = { kind, ...form };
-    if (!payload.date) payload.date = todayIso();
+  useEffect(() => {
+    const next = {};
+    exercises.forEach((exercise) => {
+      const last = lastForExercise(sortedEntries, exercise.name);
+      next[exercise.name] = {
+        weight_kg: last?.weight_kg || "",
+        reps: last?.reps || exercise.reps || "",
+        notes: "",
+      };
+    });
+    setExerciseLog(next);
+
+    if (run) {
+      const last = lastRun(sortedEntries, run.label);
+      setRunLog({
+        distance_km: last?.distance_km || "",
+        duration_min: last?.duration_min || "",
+        notes: "",
+      });
+    } else {
+      setRunLog({});
+    }
+  }, [selectedDay, exercises, run, sortedEntries]);
+
+  const setExerciseField = (name, key, rawValue) => {
+    setExerciseLog((prev) => ({
+      ...prev,
+      [name]: { ...prev[name], [key]: rawValue },
+    }));
+  };
+
+  const saveWorkout = async () => {
     setBusy(true);
     try {
-      await createTraining(payload);
-      setForm({ date: todayIso() });
-      load();
-      toast("Logged.", { description: "Quiet evidence." });
+      const tasks = [];
+      if (run && (runLog.distance_km || runLog.duration_min || runLog.notes || run.distance)) {
+        tasks.push(createTraining({
+          kind: "run",
+          date,
+          session_name: run.label,
+          distance_km: runLog.distance_km ? Number(runLog.distance_km) : null,
+          duration_min: runLog.duration_min ? Number(runLog.duration_min) : null,
+          notes: runLog.notes || "",
+        }));
+      }
+
+      exercises.forEach((exercise) => {
+        const value = exerciseLog[exercise.name] || {};
+        if (!value.weight_kg && !value.reps && !value.notes) return;
+        tasks.push(createTraining({
+          kind: "strength",
+          date,
+          session_name: workout.focus,
+          exercise: exercise.name,
+          sets: exercise.sets,
+          reps: value.reps ? Number(value.reps) : exercise.reps,
+          weight_kg: value.weight_kg ? Number(value.weight_kg) : null,
+          notes: value.notes || "",
+        }));
+      });
+
+      if (!tasks.length) {
+        toast("Nothing to save. The workout is prepared, not psychic.");
+        return;
+      }
+
+      await Promise.all(tasks);
+      await load();
+      toast("Saved.", { description: "Continue, not start over." });
     } catch {
-      toast("Couldn't log that.");
-    } finally { setBusy(false); }
+      toast("Couldn't save workout.");
+    } finally {
+      setBusy(false);
+    }
   };
 
   const remove = async (id) => {
-    await deleteTraining(id);
-    load();
+    try {
+      await deleteTraining(id);
+      load();
+    } catch {
+      toast("Couldn't delete that.");
+    }
   };
 
-  const setField = (k, v) => setForm(prev => ({ ...prev, [k]: v }));
+  const linkStrava = async () => {
+    setStravaBusy(true);
+    try {
+      const res = await stravaLoginUrl();
+      window.location.href = res.url;
+    } catch {
+      toast("Couldn't start Strava link.");
+      setStravaBusy(false);
+    }
+  };
 
-  const inputCls = "bg-moss-800/60 border border-moss-700 rounded-xl px-3 py-2 text-sm text-moss-50 placeholder-moss-200/50 outline-none focus:border-amber/50 transition-colors";
+  const importStrava = async () => {
+    setStravaBusy(true);
+    try {
+      const res = await stravaImport({ limit: 10 });
+      await load();
+      toast(`Imported ${res.imported_count || 0} from Strava.`, {
+        description: res.imported_count ? "Quiet evidence acquired." : "Nothing new. Suspiciously calm.",
+      });
+    } catch {
+      toast("Couldn't import Strava activities.");
+    } finally {
+      setStravaBusy(false);
+    }
+  };
+
+  const unlinkStrava = async () => {
+    setStravaBusy(true);
+    try {
+      await stravaUnlink();
+      await load();
+      toast("Strava unlinked.");
+    } catch {
+      toast("Couldn't unlink Strava.");
+    } finally {
+      setStravaBusy(false);
+    }
+  };
 
   return (
-    <div className="px-6 md:px-12 py-10 md:py-16 max-w-5xl mx-auto" data-testid="training-page">
+    <div className="px-6 md:px-12 py-10 md:py-16 max-w-6xl mx-auto" data-testid="training-page">
       <div className="mb-10">
-        <div className="text-xs uppercase tracking-[0.25em] text-moss-200/70 mb-2">Show up. Log it. Move on.</div>
+        <div className="text-xs uppercase tracking-[0.25em] text-moss-200/70 mb-2">Future me already prepared this</div>
         <h1 className="font-heading text-4xl md:text-5xl text-moss-50">Training</h1>
       </div>
 
-      <div className="warm-card rounded-3xl p-6 mb-10" data-testid="weekly-template">
+      <div className="warm-card rounded-3xl p-6 mb-8" data-testid="weekly-template">
         <div className="text-xs uppercase tracking-[0.25em] text-moss-200/70 mb-4 flex items-center gap-2">
           <Activity size={14} /> Weekly rhythm
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-7 gap-3">
-          {DAY_ORDER.map(d => (
-            <div key={d} className="rounded-2xl border border-moss-700/60 px-3 py-3 bg-moss-800/30">
-              <div className="font-heading text-moss-50 text-sm capitalize">{d.slice(0,3)}</div>
-              <div className="text-xs text-moss-200 mt-1 leading-snug">{template[d]?.focus || "—"}</div>
-            </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {SESSION_OPTIONS.map((option) => (
+            <button
+              key={option.id}
+              data-testid={`session-${option.id}`}
+              onClick={() => setSession(option.id)}
+              className={`text-left rounded-2xl border px-4 py-3 transition-colors ${session === option.id ? "border-amber bg-amber/10" : "border-moss-700/60 bg-moss-800/30 hover:border-moss-500"}`}
+            >
+              <div className="font-heading text-moss-50 text-sm">{option.label}</div>
+              <div className="text-xs text-moss-200 mt-1 leading-snug">{option.sub}</div>
+            </button>
           ))}
         </div>
       </div>
 
-      <div className="warm-card rounded-3xl p-6 mb-10" data-testid="training-logger">
-        <div className="flex gap-2 mb-5">
-          {[
-            { id: "run", label: "Run", icon: Footprints },
-            { id: "strength", label: "Strength", icon: Dumbbell },
-            { id: "note", label: "Note", icon: NotebookPen },
-          ].map(k => (
-            <button key={k.id} data-testid={`kind-${k.id}`} onClick={() => { setKind(k.id); setForm({ date: todayIso() }); }}
-              className={`pill-btn rounded-full px-4 py-1.5 text-xs flex items-center gap-2 ${kind === k.id ? "primary" : ""}`}>
-              <k.icon size={13} /> {k.label}
-            </button>
+      <div className="warm-card rounded-3xl p-6 mb-8" data-testid="strava-card">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <div className="text-xs uppercase tracking-[0.25em] text-moss-200/70 mb-2 flex items-center gap-2">
+              <Activity size={14} /> Strava
+            </div>
+            <h2 className="font-heading text-2xl text-moss-50">{strava.linked ? "Connected" : "Connect runs"}</h2>
+            <p className="text-sm text-moss-200 mt-1">
+              {strava.linked
+                ? `Linked${strava.athlete?.firstname ? ` as ${strava.athlete.firstname}` : ""}. Import recent activities when you want the log caught up.`
+                : "Pull recent activities into training without manually typing every kilometer like it is 2009."}
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {!strava.linked && (
+              <button data-testid="strava-link" disabled={!strava.configured || stravaBusy} onClick={linkStrava} className="pill-btn primary rounded-full px-5 py-2 text-xs inline-flex items-center gap-2 disabled:opacity-40">
+                <Link2 size={13} /> Link Strava
+              </button>
+            )}
+            {strava.linked && (
+              <>
+                <button data-testid="strava-import" disabled={stravaBusy} onClick={importStrava} className="pill-btn primary rounded-full px-5 py-2 text-xs inline-flex items-center gap-2 disabled:opacity-40">
+                  <RefreshCw size={13} /> Import recent
+                </button>
+                <button data-testid="strava-unlink" disabled={stravaBusy} onClick={unlinkStrava} className="pill-btn rounded-full px-5 py-2 text-xs inline-flex items-center gap-2 disabled:opacity-40">
+                  <Unlink size={13} /> Unlink
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="warm-card rounded-3xl p-6 mb-10" data-testid="prepared-workout">
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-5">
+          <div>
+            <div className="text-xs uppercase tracking-[0.25em] text-moss-200/70 mb-2 flex items-center gap-2">
+              <Dumbbell size={14} /> Prepared session
+            </div>
+            <h2 className="font-heading text-3xl text-moss-50">{workout.focus || "Prepared workout"}</h2>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {session === "long" && (
+              <select data-testid="long-run-day" value={longRunDay} onChange={(e) => setLongRunDay(e.target.value)} className={inputCls}>
+                <option value="saturday">Saturday</option>
+                <option value="sunday">Sunday</option>
+              </select>
+            )}
+            <input data-testid="training-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} className={inputCls} />
+          </div>
+        </div>
+
+        {run && (
+          <div className="rounded-2xl border border-moss-700/70 bg-moss-800/35 p-4 mb-4">
+            <div className="flex items-center gap-2 mb-3">
+              <Footprints size={15} className="text-amber" />
+              <div>
+                <h3 className="font-heading text-lg text-moss-50">{run.label}</h3>
+                {run.distance && <p className="text-xs text-moss-200">{run.distance}</p>}
+              </div>
+            </div>
+            <p className="text-sm text-moss-200 mb-3">
+              Last: {lastRun(sortedEntries, run.label) ? `${lastRun(sortedEntries, run.label)?.distance_km || "-"} km x ${lastRun(sortedEntries, run.label)?.duration_min || "-"} min` : "no log yet"}
+            </p>
+            <div className="grid md:grid-cols-3 gap-2">
+              <input data-testid="run-distance" type="number" step="0.1" placeholder="distance km" value={runLog.distance_km || ""} onChange={(e) => setRunLog((p) => ({ ...p, distance_km: e.target.value }))} className={inputCls} />
+              <input data-testid="run-time" type="number" step="0.1" placeholder="time min" value={runLog.duration_min || ""} onChange={(e) => setRunLog((p) => ({ ...p, duration_min: e.target.value }))} className={inputCls} />
+              <input data-testid="run-notes" placeholder="optional notes" value={runLog.notes || ""} onChange={(e) => setRunLog((p) => ({ ...p, notes: e.target.value }))} className={inputCls} />
+            </div>
+          </div>
+        )}
+
+        <div className="grid lg:grid-cols-2 gap-3">
+          {exercises.map((exercise) => (
+            <ExerciseRow
+              key={exercise.name}
+              exercise={exercise}
+              value={exerciseLog[exercise.name] || {}}
+              previous={lastForExercise(sortedEntries, exercise.name)}
+              onChange={setExerciseField}
+            />
           ))}
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
-          <input data-testid="training-session-name" placeholder="session name (e.g. 4×4 + upper)" value={form.session_name || ""} onChange={e => setField("session_name", e.target.value)} className={inputCls + " md:col-span-3"} />
-          <input type="date" data-testid="training-date" value={form.date || ""} onChange={e => setField("date", e.target.value)} className={inputCls} />
-        </div>
-
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
-          {kind === "run" && (
-            <>
-              <input data-testid="training-distance" placeholder="km" type="number" step="0.1" value={form.distance_km || ""} onChange={e => setField("distance_km", parseFloat(e.target.value) || null)} className={inputCls} />
-              <input data-testid="training-duration" placeholder="min" type="number" step="0.1" value={form.duration_min || ""} onChange={e => setField("duration_min", parseFloat(e.target.value) || null)} className={inputCls} />
-              <input data-testid="training-hr" placeholder="avg HR" type="number" value={form.avg_hr || ""} onChange={e => setField("avg_hr", parseInt(e.target.value) || null)} className={inputCls} />
-              <input data-testid="training-pace" placeholder="pace (5:40/km)" value={form.pace || ""} onChange={e => setField("pace", e.target.value)} className={inputCls} />
-            </>
-          )}
-          {kind === "strength" && (
-            <>
-              <input data-testid="training-exercise" placeholder="exercise" value={form.exercise || ""} onChange={e => setField("exercise", e.target.value)} className={inputCls + " md:col-span-2"} />
-              <input data-testid="training-weight" placeholder="kg" type="number" step="0.5" value={form.weight_kg || ""} onChange={e => setField("weight_kg", parseFloat(e.target.value) || null)} className={inputCls} />
-              <input data-testid="training-sets" placeholder="sets" type="number" value={form.sets || ""} onChange={e => setField("sets", parseInt(e.target.value) || null)} className={inputCls} />
-              <input data-testid="training-reps" placeholder="reps" type="number" value={form.reps || ""} onChange={e => setField("reps", parseInt(e.target.value) || null)} className={inputCls} />
-            </>
-          )}
-        </div>
-
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
-          <select data-testid="training-mood-before" value={form.mood_before || ""} onChange={e => setField("mood_before", e.target.value)} className={inputCls}>
-            <option value="">mood before</option>
-            {MOODS.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
-          </select>
-          <select data-testid="training-mood-after" value={form.mood_after || ""} onChange={e => setField("mood_after", e.target.value)} className={inputCls}>
-            <option value="">mood after</option>
-            {MOODS.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
-          </select>
-          <input data-testid="training-win" placeholder="win of the day" value={form.win_of_the_day || ""} onChange={e => setField("win_of_the_day", e.target.value)} className={inputCls + " md:col-span-2"} />
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
-          <textarea data-testid="training-notes" value={form.notes || ""} onChange={e => setField("notes", e.target.value)} placeholder="workout notes" className={inputCls + " min-h-[72px] resize-none"} />
-          <textarea data-testid="training-soreness" value={form.soreness_notes || ""} onChange={e => setField("soreness_notes", e.target.value)} placeholder="soreness / body notes" className={inputCls + " min-h-[72px] resize-none"} />
-        </div>
-
-        <div className="mt-3 flex justify-end">
-          <button data-testid="training-save" disabled={busy} onClick={submit} className="pill-btn primary rounded-full px-5 py-1.5 text-xs disabled:opacity-40">Log it</button>
+        <div className="mt-5 flex justify-end">
+          <button data-testid="training-save" disabled={busy} onClick={saveWorkout} className="pill-btn primary rounded-full px-5 py-2 text-xs inline-flex items-center gap-2 disabled:opacity-40">
+            <Save size={13} /> Save session
+          </button>
         </div>
       </div>
 
       <div className="space-y-3" data-testid="training-entries">
-        {entries.length === 0 && <p className="text-moss-200 italic font-body">Nothing logged yet. That's fine.</p>}
-        {entries.map(e => (
-          <div key={e.id} className="warm-card rounded-2xl p-4 flex items-start gap-4">
-            <div className="text-amber font-heading text-sm w-20 shrink-0">{e.date || "—"}</div>
+        {entries.slice(0, 16).map((entry) => (
+          <div key={entry.id} className="warm-card rounded-2xl p-4 flex items-start gap-4">
+            <div className="text-amber font-heading text-sm w-20 shrink-0">{entry.date || "-"}</div>
             <div className="flex-1 min-w-0">
               <div className="text-moss-50 text-sm font-medium">
-                <span className="capitalize">{e.kind}</span>
-                {e.session_name && <span className="text-moss-100"> · {e.session_name}</span>}
-                {e.kind === "run" && (e.distance_km || e.duration_min) && (
+                <span className="capitalize">{entry.kind}</span>
+                {entry.session_name && <span className="text-moss-100"> - {entry.session_name}</span>}
+                {entry.kind === "run" && (entry.distance_km || entry.duration_min) && (
                   <span className="text-moss-200 font-normal ml-2">
-                    {e.distance_km ? `${e.distance_km}km` : ""}{e.duration_min ? ` · ${e.duration_min}min` : ""}{e.pace ? ` · ${e.pace}` : ""}{e.avg_hr ? ` · HR ${e.avg_hr}` : ""}
+                    {entry.distance_km ? `${entry.distance_km}km` : ""}{entry.duration_min ? ` - ${entry.duration_min}min` : ""}{entry.pace ? ` - ${entry.pace}` : ""}{entry.avg_hr ? ` - HR ${entry.avg_hr}` : ""}
                   </span>
                 )}
-                {e.kind === "strength" && (
+                {entry.kind === "strength" && (
                   <span className="text-moss-200 font-normal ml-2">
-                    {e.exercise || ""}{e.weight_kg ? ` · ${e.weight_kg}kg` : ""}{e.sets && e.reps ? ` · ${e.sets}×${e.reps}` : ""}
+                    {entry.exercise || ""}{entry.weight_kg ? ` - ${entry.weight_kg}kg` : ""}{entry.sets && entry.reps ? ` - ${entry.sets}x${entry.reps}` : ""}
                   </span>
                 )}
               </div>
-              <div className="text-[11px] text-moss-200 mt-1 flex flex-wrap gap-2">
-                {e.mood_before && <span>before: <span className="text-amber/90">{e.mood_before}</span></span>}
-                {e.mood_after && <span>after: <span className="text-amber/90">{e.mood_after}</span></span>}
-                {e.feel ? <span>feel: {e.feel}</span> : null}
-              </div>
-              {e.win_of_the_day && <p className="text-moss-100 mt-2 font-heading italic text-sm">"{e.win_of_the_day}"</p>}
-              {e.notes && <p className="text-moss-200 text-sm mt-1">{e.notes}</p>}
-              {e.soreness_notes && <p className="text-moss-200/80 text-xs mt-1">soreness — {e.soreness_notes}</p>}
+              {entry.notes && <p className="text-moss-200 text-sm mt-1">{entry.notes}</p>}
             </div>
             <div className="flex flex-col gap-2 items-center shrink-0">
-              <DiscussButton testid={`training-discuss-${e.id}`} seed={`About this training session on ${e.date || ""}: ${e.session_name || e.kind || ""}${e.kind === "run" && e.distance_km ? ` — ${e.distance_km}km${e.duration_min ? ` in ${e.duration_min}min` : ""}${e.pace ? ` at ${e.pace}` : ""}` : ""}${e.kind === "strength" && e.exercise ? ` — ${e.exercise}${e.weight_kg ? ` ${e.weight_kg}kg` : ""}${e.sets && e.reps ? ` ${e.sets}×${e.reps}` : ""}` : ""}${e.mood_before || e.mood_after ? ` (mood ${e.mood_before || "?"}→${e.mood_after || "?"})` : ""}${e.win_of_the_day ? `. Win: ${e.win_of_the_day}` : ""}${e.notes ? `. Notes: ${e.notes}` : ""}.\n\n`} />
-              <button data-testid={`training-delete-${e.id}`} onClick={() => remove(e.id)} className="opacity-30 hover:opacity-100 text-moss-200 hover:text-amber transition-opacity">
+              <DiscussButton testid={`training-discuss-${entry.id}`} seed={`About this training session on ${entry.date || ""}: ${entry.session_name || entry.kind || ""}${entry.kind === "run" && entry.distance_km ? ` - ${entry.distance_km}km${entry.duration_min ? ` in ${entry.duration_min}min` : ""}${entry.pace ? ` at ${entry.pace}` : ""}` : ""}${entry.kind === "strength" && entry.exercise ? ` - ${entry.exercise}${entry.weight_kg ? ` ${entry.weight_kg}kg` : ""}${entry.sets && entry.reps ? ` ${entry.sets}x${entry.reps}` : ""}` : ""}${entry.notes ? `. Notes: ${entry.notes}` : ""}.\n\n`} />
+              <button data-testid={`training-delete-${entry.id}`} onClick={() => remove(entry.id)} className="opacity-30 hover:opacity-100 text-moss-200 hover:text-amber transition-opacity">
                 <Trash2 size={15} />
               </button>
             </div>

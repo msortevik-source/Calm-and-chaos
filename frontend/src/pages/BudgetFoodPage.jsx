@@ -1,202 +1,358 @@
-import { useEffect, useState } from "react";
-import { listBudget, createBudget, deleteBudget, listMeals, createMeal, deleteMeal, MOODS } from "../lib/api";
-import DiscussButton from "../components/DiscussButton";
-import { Trash2, Wallet, Soup, Plus } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { CalendarDays, Check, ListChecks, Plus, ShoppingBasket, Trash2, Utensils, Wallet } from "lucide-react";
 import { toast } from "sonner";
+import {
+  createSpending,
+  deleteSpending,
+  getBudgetV1,
+  getFoodV1,
+  markSpendingCheckin,
+  saveBudgetSetup,
+  saveFoodV1,
+} from "../lib/api";
 
 const todayIso = () => new Date().toISOString().slice(0, 10);
+const monthKey = () => todayIso().slice(0, 7);
 const inputCls = "bg-moss-800/60 border border-moss-700 rounded-xl px-3 py-2 text-sm text-moss-50 placeholder-moss-200/50 outline-none focus:border-amber/50 transition-colors";
 
-const CATEGORIES = ["food", "transport", "bills", "joy", "regret", "essential", "other"];
-const PREP_STATUSES = ["idea", "planned", "prepped", "eaten"];
+const money = (value, decimals = 0) => {
+  const amount = Number(value || 0);
+  return `${new Intl.NumberFormat("nb-NO", {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  }).format(amount)} kr`;
+};
 
-function BudgetSection() {
-  const [entries, setEntries] = useState([]);
-  const [monthTotal, setMonthTotal] = useState(0);
-  const [byCat, setByCat] = useState({});
-  const [form, setForm] = useState({ date: todayIso(), category: "food" });
-  const [busy, setBusy] = useState(false);
-
-  const load = async () => {
-    const d = await listBudget();
-    setEntries(d.entries || []);
-    setMonthTotal(d.month_total || 0);
-    setByCat(d.by_category || {});
-  };
-  useEffect(() => { load(); }, []);
-
-  const save = async () => {
-    if (!form.item || !form.amount) { toast("Item and amount, at least."); return; }
-    setBusy(true);
-    try {
-      await createBudget({
-        ...form,
-        amount: parseFloat(form.amount),
-      });
-      setForm({ date: todayIso(), category: form.category });
-      load();
-    } finally { setBusy(false); }
-  };
-
-  const setField = (k, v) => setForm(p => ({ ...p, [k]: v }));
-
+function Stat({ label, value }) {
   return (
-    <div className="mb-12" data-testid="budget-section">
-      <div className="flex items-end justify-between mb-5">
-        <div className="flex items-center gap-3">
-          <Wallet size={18} className="text-amber" />
-          <h2 className="font-heading text-2xl md:text-3xl text-moss-50">Budget</h2>
-        </div>
-        <div className="text-right">
-          <div className="text-[10px] uppercase tracking-[0.25em] text-moss-200/70">this month</div>
-          <div className="font-heading text-xl text-moss-50">{monthTotal.toFixed(0)}</div>
-        </div>
-      </div>
-
-      {Object.keys(byCat).length > 0 && (
-        <div className="flex flex-wrap gap-2 mb-5" data-testid="budget-bycat">
-          {Object.entries(byCat).sort((a,b) => b[1]-a[1]).map(([c, v]) => (
-            <div key={c} className="text-xs text-moss-100 bg-moss-800/60 border border-moss-700 rounded-full px-3 py-1">
-              {c} · <span className="text-amber">{v.toFixed(0)}</span>
-            </div>
-          ))}
-        </div>
-      )}
-
-      <div className="warm-card rounded-3xl p-5 mb-6">
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-          <input data-testid="budget-item" placeholder="item" value={form.item || ""} onChange={e => setField("item", e.target.value)} className={inputCls + " md:col-span-2"} />
-          <input data-testid="budget-amount" placeholder="amount" type="number" step="0.01" value={form.amount || ""} onChange={e => setField("amount", e.target.value)} className={inputCls} />
-          <select data-testid="budget-category" value={form.category || "other"} onChange={e => setField("category", e.target.value)} className={inputCls}>
-            {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-          </select>
-          <input type="date" data-testid="budget-date" value={form.date || todayIso()} onChange={e => setField("date", e.target.value)} className={inputCls} />
-        </div>
-        <textarea data-testid="budget-notes" value={form.notes || ""} onChange={e => setField("notes", e.target.value)} placeholder="notes (optional)" className={inputCls + " w-full mt-3 min-h-[56px] resize-none"} />
-        <div className="flex justify-end mt-3">
-          <button data-testid="budget-save" disabled={busy || !form.item || !form.amount} onClick={save} className="pill-btn primary rounded-full px-5 py-1.5 text-xs inline-flex items-center gap-2 disabled:opacity-40">
-            <Plus size={13} /> Add
-          </button>
-        </div>
-      </div>
-
-      <div className="space-y-2" data-testid="budget-entries">
-        {entries.length === 0 && <p className="text-moss-200 italic font-body text-sm">No spending yet. Excellent or impossible.</p>}
-        {entries.slice(0, 20).map(e => (
-          <div key={e.id} className="warm-card rounded-2xl p-4 flex items-center gap-4">
-            <div className="text-amber font-heading text-sm w-20 shrink-0">{e.date}</div>
-            <div className="flex-1 min-w-0">
-              <div className="text-moss-50 text-sm">{e.item}</div>
-              {e.notes && <div className="text-moss-200 text-xs italic mt-0.5">{e.notes}</div>}
-            </div>
-            <div className="text-xs text-moss-200 mr-3 capitalize">{e.category}</div>
-            <div className="font-heading text-moss-50 text-base">{Number(e.amount).toFixed(2)}</div>
-            <DiscussButton testid={`budget-discuss-${e.id}`} seed={`About this spending: ${e.item} — ${Number(e.amount).toFixed(2)} (${e.category || "other"}) on ${e.date}${e.notes ? `. Notes: ${e.notes}` : ""}.\n\n`} />
-            <button data-testid={`budget-delete-${e.id}`} onClick={async () => { await deleteBudget(e.id); load(); }} className="opacity-30 hover:opacity-100 text-moss-200 hover:text-amber transition-opacity ml-3">
-              <Trash2 size={15} />
-            </button>
-          </div>
-        ))}
-      </div>
+    <div className="warm-card rounded-2xl p-4">
+      <div className="text-[10px] uppercase tracking-[0.22em] text-moss-200/70 mb-1">{label}</div>
+      <div className="font-heading text-2xl text-moss-50">{value}</div>
     </div>
   );
 }
 
-function MealSection() {
-  const [entries, setEntries] = useState([]);
-  const [form, setForm] = useState({ date: todayIso(), prep_status: "idea", easy_quick: false });
+function BudgetV1() {
+  const [month, setMonth] = useState(monthKey());
+  const [data, setData] = useState(null);
+  const [setup, setSetup] = useState({ income: {}, fixed_expenses: {} });
+  const [spend, setSpend] = useState({ date: todayIso(), category: "groceries" });
   const [busy, setBusy] = useState(false);
 
-  const load = async () => {
-    const d = await listMeals();
-    setEntries(d.entries || []);
-  };
-  useEffect(() => { load(); }, []);
+  const load = useCallback(async () => {
+    const res = await getBudgetV1(month);
+    setData(res);
+    setSetup(res.setup || { income: {}, fixed_expenses: {} });
+  }, [month]);
 
-  const save = async () => {
-    if (!form.meal) { toast("Name the meal at least."); return; }
+  useEffect(() => { load().catch(() => toast("Budget is being dramatic.")); }, [load]);
+
+  const setMoney = (group, key, value) => {
+    setSetup((prev) => ({ ...prev, [group]: { ...prev[group], [key]: value } }));
+  };
+
+  const saveSetup = async () => {
     setBusy(true);
     try {
-      await createMeal(form);
-      setForm({ date: todayIso(), prep_status: "idea", easy_quick: false });
-      load();
-    } finally { setBusy(false); }
+      await saveBudgetSetup({ month, income: setup.income, fixed_expenses: setup.fixed_expenses });
+      await load();
+      toast("Month saved. Future you gets a chair.");
+    } finally {
+      setBusy(false);
+    }
   };
 
-  const setField = (k, v) => setForm(p => ({ ...p, [k]: v }));
+  const addSpending = async () => {
+    if (!spend.amount) { toast("Amount first. The number goblin demands one fact."); return; }
+    setBusy(true);
+    try {
+      await createSpending({ ...spend, amount: Number(spend.amount) });
+      setSpend({ date: todayIso(), category: spend.category });
+      await load();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const checkInNoSpend = async () => {
+    setBusy(true);
+    try {
+      await markSpendingCheckin({ date: spend.date || todayIso() });
+      await load();
+      toast("Noted. Zero-spend days still count as noticing.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const summary = data?.summary || {};
+  const incomeEntries = Object.entries(setup.income || {});
+  const fixedEntries = Object.entries(setup.fixed_expenses || {});
+  const resetWindow = "11th/12th-ish";
 
   return (
-    <div data-testid="meals-section">
-      <div className="flex items-center gap-3 mb-5">
-        <Soup size={18} className="text-amber" />
-        <h2 className="font-heading text-2xl md:text-3xl text-moss-50">Meal planning & prep</h2>
+    <section className="space-y-6" data-testid="budget-v1">
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2 text-moss-200 text-xs uppercase tracking-[0.25em] mb-2">
+            <Wallet size={14} /> Money awareness
+          </div>
+          <h2 className="font-heading text-3xl text-moss-50">Where does it go?</h2>
+        </div>
+        <input data-testid="budget-month" type="month" value={month} onChange={(e) => setMonth(e.target.value)} className={inputCls + " w-44"} />
       </div>
 
-      <div className="warm-card rounded-3xl p-5 mb-6">
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-          <input data-testid="meal-name" placeholder="meal" value={form.meal || ""} onChange={e => setField("meal", e.target.value)} className={inputCls + " md:col-span-2"} />
-          <input data-testid="meal-protein" placeholder="protein source" value={form.protein_source || ""} onChange={e => setField("protein_source", e.target.value)} className={inputCls} />
-          <select data-testid="meal-status" value={form.prep_status || "idea"} onChange={e => setField("prep_status", e.target.value)} className={inputCls}>
-            {PREP_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
-          </select>
-          <input type="date" data-testid="meal-date" value={form.date || todayIso()} onChange={e => setField("date", e.target.value)} className={inputCls} />
+      <div className="grid md:grid-cols-4 gap-3">
+        <Stat label="income" value={money(summary.income_total)} />
+        <Stat label="fixed" value={money(summary.fixed_total)} />
+        <Stat label="flexible logged" value={money(summary.flexible_total)} />
+        <Stat label="expected left" value={money(summary.left_after_logged_spending)} />
+      </div>
+      <div className="warm-card rounded-2xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-2">
+        <div>
+          <div className="text-[10px] uppercase tracking-[0.22em] text-moss-200/70">monthly reset</div>
+          <div className="text-sm text-moss-100">Around the {resetWindow}: snapshot, archive, keep recurring expenses.</div>
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mt-3">
-          <label className="flex items-center gap-2 text-sm text-moss-100 px-3 py-2 rounded-xl border border-moss-700 bg-moss-800/40" data-testid="meal-easy-wrap">
-            <input data-testid="meal-easy" type="checkbox" checked={!!form.easy_quick} onChange={e => setField("easy_quick", e.target.checked)} className="accent-amber" />
-            easy / quick
-          </label>
-          <select data-testid="meal-mood" value={form.mood_after || ""} onChange={e => setField("mood_after", e.target.value)} className={inputCls}>
-            <option value="">mood after</option>
-            {MOODS.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
-          </select>
-          <input data-testid="meal-notes" value={form.notes || ""} onChange={e => setField("notes", e.target.value)} placeholder="notes" className={inputCls} />
-        </div>
-        <div className="flex justify-end mt-3">
-          <button data-testid="meal-save" disabled={busy || !form.meal} onClick={save} className="pill-btn primary rounded-full px-5 py-1.5 text-xs inline-flex items-center gap-2 disabled:opacity-40">
-            <Plus size={13} /> Add
+        <div className="font-heading text-xl text-moss-50">{summary.checked_days || 0}/{summary.days_in_month || 30} days checked in</div>
+      </div>
+
+      <div className="grid lg:grid-cols-2 gap-5">
+        <div className="warm-card rounded-3xl p-5">
+          <h3 className="font-heading text-xl text-moss-50 mb-4">Monthly setup</h3>
+          <div className="grid md:grid-cols-2 gap-5">
+            <div>
+              <div className="text-xs uppercase tracking-[0.22em] text-moss-200/70 mb-3">income</div>
+              <div className="space-y-2">
+                {incomeEntries.map(([key, value]) => (
+                  <label key={key} className="grid grid-cols-[1fr_110px] gap-2 items-center text-sm text-moss-100">
+                    <span>{key}</span>
+                    <input type="number" value={value || ""} onChange={(e) => setMoney("income", key, e.target.value)} className={inputCls} />
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div>
+              <div className="text-xs uppercase tracking-[0.22em] text-moss-200/70 mb-3">fixed expenses</div>
+              <div className="space-y-2 max-h-[340px] overflow-auto pr-1">
+                {fixedEntries.map(([key, value]) => (
+                  <label key={key} className="grid grid-cols-[1fr_110px] gap-2 items-center text-sm text-moss-100">
+                    <span>{key}</span>
+                    <input type="number" value={value || ""} onChange={(e) => setMoney("fixed_expenses", key, e.target.value)} className={inputCls} />
+                  </label>
+                ))}
+              </div>
+            </div>
+          </div>
+          <button data-testid="budget-setup-save" disabled={busy} onClick={saveSetup} className="pill-btn primary rounded-full px-5 py-2 text-xs mt-5">
+            Save month
           </button>
         </div>
+
+        <div className="warm-card rounded-3xl p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <ListChecks size={15} className="text-amber" />
+            <h3 className="font-heading text-xl text-moss-50">Any spending today?</h3>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <input data-testid="spending-amount" type="number" step="0.01" placeholder="amount in kr" value={spend.amount || ""} onChange={(e) => setSpend((p) => ({ ...p, amount: e.target.value }))} className={inputCls} />
+            <select data-testid="spending-category" value={spend.category} onChange={(e) => setSpend((p) => ({ ...p, category: e.target.value }))} className={inputCls}>
+              {(data?.categories || []).map((cat) => <option key={cat} value={cat}>{cat}</option>)}
+            </select>
+            <input data-testid="spending-date" type="date" value={spend.date} onChange={(e) => setSpend((p) => ({ ...p, date: e.target.value }))} className={inputCls} />
+            <input data-testid="spending-note" placeholder="note, if useful" value={spend.note || ""} onChange={(e) => setSpend((p) => ({ ...p, note: e.target.value }))} className={inputCls} />
+          </div>
+          <div className="flex flex-wrap gap-2 mt-4">
+            <button data-testid="spending-save" disabled={busy} onClick={addSpending} className="pill-btn primary rounded-full px-5 py-2 text-xs inline-flex items-center gap-2">
+              <Plus size={13} /> Log it
+            </button>
+            <button data-testid="spending-checkin" disabled={busy} onClick={checkInNoSpend} className="pill-btn rounded-full px-5 py-2 text-xs inline-flex items-center gap-2">
+              <Check size={13} /> Nothing spent
+            </button>
+          </div>
+
+          <div className="mt-6">
+            <div className="text-xs uppercase tracking-[0.22em] text-moss-200/70 mb-3">categories</div>
+            <div className="flex flex-wrap gap-2">
+              {Object.entries(summary.by_category || {}).map(([cat, amount]) => (
+                <span key={cat} className="rounded-full border border-moss-700 bg-moss-800/50 px-3 py-1 text-xs text-moss-100">
+                  {cat}: <span className="text-amber">{money(amount)}</span>
+                </span>
+              ))}
+              {Object.keys(summary.by_category || {}).length === 0 && <span className="text-sm text-moss-200 italic">No spend logged. Either peaceful or undocumented.</span>}
+            </div>
+          </div>
+
+          {(summary.observations || []).length > 0 && (
+            <div className="mt-5 space-y-2">
+              {summary.observations.map((obs) => <p key={obs} className="text-sm text-moss-200 italic">{obs}</p>)}
+            </div>
+          )}
+        </div>
       </div>
 
-      <div className="space-y-2" data-testid="meal-entries">
-        {entries.length === 0 && <p className="text-moss-200 italic font-body text-sm">No meals logged yet.</p>}
-        {entries.slice(0, 20).map(e => (
-          <div key={e.id} className="warm-card rounded-2xl p-4 flex items-center gap-4">
-            <div className="text-amber font-heading text-sm w-20 shrink-0">{e.date}</div>
+      <div className="space-y-2" data-testid="spending-list">
+        {(data?.spending || []).slice(0, 12).map((entry) => (
+          <div key={entry.id} className="warm-card rounded-2xl p-4 flex items-center gap-3">
+            <div className="text-amber font-heading text-sm w-24 shrink-0">{entry.date}</div>
             <div className="flex-1 min-w-0">
-              <div className="text-moss-50 text-sm">
-                {e.meal}
-                {e.protein_source && <span className="text-moss-200"> · {e.protein_source}</span>}
-                {e.easy_quick && <span className="ml-2 text-[10px] uppercase tracking-wider text-amber/90 bg-amber-soft px-2 py-0.5 rounded-full">easy</span>}
-              </div>
-              {e.notes && <div className="text-moss-200 text-xs italic mt-0.5">{e.notes}</div>}
+              <div className="text-moss-50 text-sm">{entry.category}</div>
+              {entry.note && <div className="text-moss-200 text-xs italic">{entry.note}</div>}
             </div>
-            <div className="text-xs text-moss-200 mr-2 capitalize">{e.prep_status}</div>
-            {e.mood_after && <div className="text-xs text-amber/90 mr-3">{e.mood_after}</div>}
-            <DiscussButton testid={`meal-discuss-${e.id}`} seed={`About this meal on ${e.date}: ${e.meal}${e.protein_source ? ` (protein: ${e.protein_source})` : ""}${e.easy_quick ? " — easy/quick" : ""}${e.prep_status ? ` — ${e.prep_status}` : ""}${e.mood_after ? `. Mood after: ${e.mood_after}` : ""}${e.notes ? `. Notes: ${e.notes}` : ""}.\n\n`} />
-            <button data-testid={`meal-delete-${e.id}`} onClick={async () => { await deleteMeal(e.id); load(); }} className="opacity-30 hover:opacity-100 text-moss-200 hover:text-amber transition-opacity">
+            <div className="font-heading text-moss-50">{money(entry.amount, 2)}</div>
+            <button data-testid={`spending-delete-${entry.id}`} onClick={async () => { await deleteSpending(entry.id); load(); }} className="text-moss-200/50 hover:text-amber">
               <Trash2 size={15} />
             </button>
           </div>
         ))}
       </div>
-    </div>
+    </section>
+  );
+}
+
+function FoodV1() {
+  const [data, setData] = useState(null);
+  const [form, setForm] = useState({});
+  const [busy, setBusy] = useState(false);
+
+  const load = async () => {
+    const res = await getFoodV1();
+    setData(res);
+    setForm(res.plan?.inputs || {});
+  };
+
+  useEffect(() => { load().catch(() => toast("Food plan refused to assemble itself.")); }, []);
+
+  const setField = (key, value) => setForm((prev) => ({ ...prev, [key]: value }));
+  const proteinChoices = form.protein_weeks || (form.protein_week ? [form.protein_week] : []);
+  const toggleProtein = (protein) => {
+    setForm((prev) => {
+      const current = prev.protein_weeks || (prev.protein_week ? [prev.protein_week] : []);
+      const exists = current.includes(protein);
+      const next = exists ? current.filter((item) => item !== protein) : [...current, protein].slice(0, 4);
+      return { ...prev, protein_weeks: next, protein_week: next[0] || "" };
+    });
+  };
+
+  const save = async () => {
+    if (!proteinChoices.length) {
+      toast("Pick at least one protein. The fridge needs a plot.");
+      return;
+    }
+    setBusy(true);
+    try {
+      const res = await saveFoodV1({ ...form, protein_weeks: proteinChoices, protein_week: proteinChoices[0] });
+      setData((prev) => ({ ...prev, plan: res.plan, week_start: res.plan.week_start }));
+      setForm(res.plan.inputs);
+      toast("Week handled. Civilization may continue.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const plan = data?.plan;
+  const planDays = useMemo(() => plan?.days || [], [plan]);
+
+  return (
+    <section className="space-y-6" data-testid="food-v1">
+      <div>
+        <div className="flex items-center gap-2 text-moss-200 text-xs uppercase tracking-[0.25em] mb-2">
+          <Utensils size={14} /> Saturday to Saturday
+        </div>
+        <h2 className="font-heading text-3xl text-moss-50">What are we eating?</h2>
+      </div>
+
+      <div className="warm-card rounded-3xl p-5">
+        <div className="grid md:grid-cols-3 gap-3">
+          <input data-testid="food-week-start" type="date" value={form.week_start || ""} onChange={(e) => setField("week_start", e.target.value)} className={inputCls} />
+          <select data-testid="food-lunch" value={form.lunch_week || ""} onChange={(e) => setField("lunch_week", e.target.value)} className={inputCls}>
+            {(data?.lunch_options || []).map((item) => <option key={item} value={item}>{item}</option>)}
+          </select>
+          <select data-testid="food-budget-feeling" value={form.budget_feeling || "normal"} onChange={(e) => setField("budget_feeling", e.target.value)} className={inputCls}>
+            {(data?.budget_feelings || []).map((item) => <option key={item} value={item}>{item}</option>)}
+          </select>
+          <input data-testid="food-breakfast" value={form.breakfast_default || ""} onChange={(e) => setField("breakfast_default", e.target.value)} placeholder="breakfast default" className={inputCls + " md:col-span-3"} />
+        </div>
+        <div className="mt-4">
+          <div className="text-xs uppercase tracking-[0.22em] text-moss-200/70 mb-2">proteins, pick 2-4 if possible</div>
+          <div className="flex flex-wrap gap-2">
+            {(data?.protein_options || []).map((item) => {
+              const active = proteinChoices.includes(item);
+              return (
+                <button
+                  key={item}
+                  type="button"
+                  data-testid={`food-protein-${item}`}
+                  onClick={() => toggleProtein(item)}
+                  className={`rounded-full border px-3 py-2 text-xs transition-colors ${active ? "border-amber bg-amber/15 text-amber" : "border-moss-700 bg-moss-800/50 text-moss-100 hover:border-moss-500"}`}
+                >
+                  {item}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+        <div className="grid md:grid-cols-3 gap-3 mt-3">
+          <textarea data-testid="food-shifts" value={form.shifts || ""} onChange={(e) => setField("shifts", e.target.value)} placeholder="shifts" className={inputCls + " min-h-[76px] resize-none"} />
+          <textarea data-testid="food-training" value={form.training_schedule || ""} onChange={(e) => setField("training_schedule", e.target.value)} placeholder="training" className={inputCls + " min-h-[76px] resize-none"} />
+          <textarea data-testid="food-leftovers" value={form.leftovers || ""} onChange={(e) => setField("leftovers", e.target.value)} placeholder="leftovers already home" className={inputCls + " min-h-[76px] resize-none"} />
+        </div>
+        <button data-testid="food-save" disabled={busy} onClick={save} className="pill-btn primary rounded-full px-5 py-2 text-xs inline-flex items-center gap-2 mt-4">
+          <CalendarDays size={13} /> Plan week
+        </button>
+      </div>
+
+      {plan && (
+        <div className="grid lg:grid-cols-[1.4fr_0.8fr] gap-5">
+          <div className="warm-card rounded-3xl p-5">
+            <h3 className="font-heading text-xl text-moss-50 mb-4">Week plan</h3>
+            <div className="space-y-3">
+              {planDays.map((day) => (
+                <div key={day.date} className="grid md:grid-cols-[100px_1fr] gap-3 border-b border-moss-700/60 pb-3 last:border-b-0">
+                  <div>
+                    <div className="text-amber font-heading text-sm">{day.day}</div>
+                    <div className="text-moss-200 text-xs">{day.date.slice(5)}</div>
+                  </div>
+                  <div className="text-sm text-moss-100 leading-relaxed">
+                    <div><span className="text-moss-200">Breakfast:</span> {day.breakfast}</div>
+                    <div><span className="text-moss-200">Lunch:</span> {day.lunch}</div>
+                    <div><span className="text-moss-200">Dinner:</span> {day.dinner}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="warm-card rounded-3xl p-5">
+            <div className="flex items-center gap-2 mb-4">
+              <ShoppingBasket size={15} className="text-amber" />
+              <h3 className="font-heading text-xl text-moss-50">Shopping list</h3>
+            </div>
+            <ul className="space-y-2 text-sm text-moss-100">
+              {(plan.shopping_list || []).map((item) => <li key={item}>- {item}</li>)}
+            </ul>
+            <div className="mt-5 text-xs uppercase tracking-[0.22em] text-moss-200/70">rough estimate</div>
+            <div className="font-heading text-2xl text-moss-50">{plan.grocery_estimate} kr</div>
+            <p className="text-sm text-moss-200 italic mt-4">{plan.note}</p>
+          </div>
+        </div>
+      )}
+    </section>
   );
 }
 
 export default function BudgetFoodPage() {
   return (
-    <div className="px-6 md:px-12 py-10 md:py-16 max-w-5xl mx-auto" data-testid="budget-food-page">
+    <div className="px-6 md:px-12 py-10 md:py-16 max-w-6xl mx-auto" data-testid="budget-food-page">
       <div className="mb-10">
-        <div className="text-xs uppercase tracking-[0.25em] text-moss-200/70 mb-2">Practical. No guilt spiral.</div>
-        <h1 className="font-heading text-4xl md:text-5xl text-moss-50">Budget & food</h1>
+        <div className="text-xs uppercase tracking-[0.25em] text-moss-200/70 mb-2">Future me is handled</div>
+        <h1 className="font-heading text-4xl md:text-5xl text-moss-50">Food & budget</h1>
         <p className="text-moss-200 mt-3 font-body italic max-w-xl">
-          Track it loosely. Notice without lecturing. Protein helps.
+          Awareness, not accounting. Rotation, not reinvention.
         </p>
       </div>
-      <BudgetSection />
-      <MealSection />
+      <div className="space-y-14">
+        <BudgetV1 />
+        <FoodV1 />
+      </div>
     </div>
   );
 }
