@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   getTemplate,
   listTraining,
@@ -95,6 +95,7 @@ function ExerciseRow({ exercise, value, previous, onChange }) {
 }
 
 export default function TrainingPage() {
+  const workoutRef = useRef(null);
   const [template, setTemplate] = useState({});
   const [entries, setEntries] = useState([]);
   const [session, setSession] = useState(defaultSession());
@@ -103,7 +104,7 @@ export default function TrainingPage() {
   const [exerciseLog, setExerciseLog] = useState({});
   const [runLog, setRunLog] = useState({});
   const [busy, setBusy] = useState(false);
-  const [strava, setStrava] = useState({ configured: false, linked: false });
+  const [strava, setStrava] = useState({ configured: true, linked: false });
   const [stravaBusy, setStravaBusy] = useState(false);
 
   const selectedDay = sessionDay(session, longRunDay);
@@ -118,15 +119,17 @@ export default function TrainingPage() {
 
   const load = async () => {
     try {
-      const [t, e, s] = await Promise.all([getTemplate(), listTraining(), stravaStatus().catch(() => null)]);
+      const [t, e] = await Promise.all([getTemplate(), listTraining()]);
       setTemplate(t.template || {});
       setEntries(e.entries || []);
-      if (s) setStrava(s);
     } catch {
       const t = await getTemplate().catch(() => ({ template: {} }));
       setTemplate(t.template || {});
       setEntries([]);
     }
+
+    const s = await stravaStatus().catch(() => null);
+    if (s) setStrava(s);
   };
 
   useEffect(() => {
@@ -165,6 +168,13 @@ export default function TrainingPage() {
       ...prev,
       [name]: { ...prev[name], [key]: rawValue },
     }));
+  };
+
+  const chooseSession = (nextSession) => {
+    setSession(nextSession);
+    window.setTimeout(() => {
+      workoutRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 60);
   };
 
   const saveWorkout = async () => {
@@ -269,14 +279,14 @@ export default function TrainingPage() {
 
       <div className="warm-card rounded-3xl p-6 mb-8" data-testid="weekly-template">
         <div className="text-xs uppercase tracking-[0.25em] text-moss-200/70 mb-4 flex items-center gap-2">
-          <Activity size={14} /> Weekly rhythm
+          <Activity size={14} /> Choose session
         </div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {SESSION_OPTIONS.map((option) => (
             <button
               key={option.id}
               data-testid={`session-${option.id}`}
-              onClick={() => setSession(option.id)}
+              onClick={() => chooseSession(option.id)}
               className={`text-left rounded-2xl border px-4 py-3 transition-colors ${session === option.id ? "border-amber bg-amber/10" : "border-moss-700/60 bg-moss-800/30 hover:border-moss-500"}`}
             >
               <div className="font-heading text-moss-50 text-sm">{option.label}</div>
@@ -286,40 +296,7 @@ export default function TrainingPage() {
         </div>
       </div>
 
-      <div className="warm-card rounded-3xl p-6 mb-8" data-testid="strava-card">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
-            <div className="text-xs uppercase tracking-[0.25em] text-moss-200/70 mb-2 flex items-center gap-2">
-              <Activity size={14} /> Strava
-            </div>
-            <h2 className="font-heading text-2xl text-moss-50">{strava.linked ? "Connected" : "Connect runs"}</h2>
-            <p className="text-sm text-moss-200 mt-1">
-              {strava.linked
-                ? `Linked${strava.athlete?.firstname ? ` as ${strava.athlete.firstname}` : ""}. Import recent activities when you want the log caught up.`
-                : "Pull recent activities into training without manually typing every kilometer like it is 2009."}
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {!strava.linked && (
-              <button data-testid="strava-link" disabled={!strava.configured || stravaBusy} onClick={linkStrava} className="pill-btn primary rounded-full px-5 py-2 text-xs inline-flex items-center gap-2 disabled:opacity-40">
-                <Link2 size={13} /> Link Strava
-              </button>
-            )}
-            {strava.linked && (
-              <>
-                <button data-testid="strava-import" disabled={stravaBusy} onClick={importStrava} className="pill-btn primary rounded-full px-5 py-2 text-xs inline-flex items-center gap-2 disabled:opacity-40">
-                  <RefreshCw size={13} /> Import recent
-                </button>
-                <button data-testid="strava-unlink" disabled={stravaBusy} onClick={unlinkStrava} className="pill-btn rounded-full px-5 py-2 text-xs inline-flex items-center gap-2 disabled:opacity-40">
-                  <Unlink size={13} /> Unlink
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-      </div>
-
-      <div className="warm-card rounded-3xl p-6 mb-10" data-testid="prepared-workout">
+      <div ref={workoutRef} className="warm-card rounded-3xl p-6 mb-8 scroll-mt-32" data-testid="prepared-workout">
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-5">
           <div>
             <div className="text-xs uppercase tracking-[0.25em] text-moss-200/70 mb-2 flex items-center gap-2">
@@ -374,6 +351,39 @@ export default function TrainingPage() {
           <button data-testid="training-save" disabled={busy} onClick={saveWorkout} className="pill-btn primary rounded-full px-5 py-2 text-xs inline-flex items-center gap-2 disabled:opacity-40">
             <Save size={13} /> Save session
           </button>
+        </div>
+      </div>
+
+      <div className="warm-card rounded-3xl p-6 mb-10" data-testid="strava-card">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <div className="text-xs uppercase tracking-[0.25em] text-moss-200/70 mb-2 flex items-center gap-2">
+              <Activity size={14} /> Strava
+            </div>
+            <h2 className="font-heading text-2xl text-moss-50">{strava.linked ? "Connected" : "Connect runs"}</h2>
+            <p className="text-sm text-moss-200 mt-1">
+              {strava.linked
+                ? `Linked${strava.athlete?.firstname ? ` as ${strava.athlete.firstname}` : ""}. Import recent activities when you want the log caught up.`
+                : "Pull recent activities into training without manually typing every kilometer like it is 2009."}
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {!strava.linked && (
+              <button data-testid="strava-link" disabled={stravaBusy} onClick={linkStrava} className="pill-btn primary rounded-full px-5 py-2 text-xs inline-flex items-center gap-2 disabled:opacity-40">
+                <Link2 size={13} /> Link Strava
+              </button>
+            )}
+            {strava.linked && (
+              <>
+                <button data-testid="strava-import" disabled={stravaBusy} onClick={importStrava} className="pill-btn primary rounded-full px-5 py-2 text-xs inline-flex items-center gap-2 disabled:opacity-40">
+                  <RefreshCw size={13} /> Import recent
+                </button>
+                <button data-testid="strava-unlink" disabled={stravaBusy} onClick={unlinkStrava} className="pill-btn rounded-full px-5 py-2 text-xs inline-flex items-center gap-2 disabled:opacity-40">
+                  <Unlink size={13} /> Unlink
+                </button>
+              </>
+            )}
+          </div>
         </div>
       </div>
 

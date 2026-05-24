@@ -18,8 +18,8 @@ html, body, #root {
 
 body {
   margin: 0;
-  /* Warmer base — soft black with subtle moss undertone, not void */
-  background-color: #1A1C19;
+  /* Warm soft black with a moss undertone. Clear, not murky. */
+  background-color: #171A17;
   color: #EAE0D0;
   font-family: 'Manrope', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
@@ -30,7 +30,7 @@ body {
 
 @layer base {
   :root {
-    /* Warmer palette — moss undertones + soft amber depth */
+    /* Warmer palette: moss undertones + soft amber depth */
     --background: 90 6% 10%;
     --foreground: 36 32% 87%;
     --card: 100 5% 13%;
@@ -59,7 +59,7 @@ body {
   h1, h2, h3, h4 { font-family: 'Spectral', serif; font-weight: 400; letter-spacing: -0.01em; }
 }
 
-/* Warm depth — slow radial glow behind everything to take the void out of dark mode */
+/* Warm depth: a quiet glow behind the app without dimming the UI */
 .warm-depth::before {
   content: "";
   position: fixed;
@@ -67,9 +67,9 @@ body {
   pointer-events: none;
   z-index: 0;
   background:
-    radial-gradient(80% 50% at 18% 0%, rgba(212, 163, 115, 0.07) 0%, transparent 60%),
-    radial-gradient(60% 60% at 100% 100%, rgba(98, 128, 105, 0.08) 0%, transparent 65%),
-    radial-gradient(120% 90% at 50% 50%, rgba(46, 56, 48, 0.12) 0%, transparent 80%);
+    radial-gradient(80% 50% at 18% 0%, rgba(212, 163, 115, 0.045) 0%, transparent 60%),
+    radial-gradient(60% 60% at 100% 100%, rgba(98, 128, 105, 0.045) 0%, transparent 65%),
+    radial-gradient(120% 90% at 50% 50%, rgba(46, 56, 48, 0.055) 0%, transparent 80%);
 }
 
 /* Subtle grain overlay */
@@ -79,7 +79,7 @@ body {
   inset: 0;
   pointer-events: none;
   z-index: 1;
-  opacity: 0.055;
+  opacity: 0.018;
   mix-blend-mode: overlay;
   background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.95 0 0 0 0 0.88 0 0 0 0 0.76 0 0 0 0.45 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
 }
@@ -131,30 +131,57 @@ body {
 
 /* Warm card surface */
 .warm-card {
-  background: linear-gradient(180deg, rgba(43, 47, 42, 0.85) 0%, rgba(33, 37, 33, 0.85) 100%);
-  border: 1px solid #2F352F;
-  box-shadow: 0 1px 0 rgba(212,163,115,0.04) inset, 0 0 0 1px rgba(212,163,115,0.02);
+  background: linear-gradient(180deg, rgba(43, 47, 42, 0.94) 0%, rgba(31, 36, 31, 0.94) 100%);
+  border: 1px solid #3A433A;
+  box-shadow: 0 1px 0 rgba(212,163,115,0.06) inset, 0 0 0 1px rgba(212,163,115,0.025);
 }
 
-/* Goblin ambient life — breathing + sway, 90% stillness */
+@media (max-width: 767px) {
+  .warm-depth::before {
+    background:
+      radial-gradient(95% 45% at 20% 0%, rgba(212, 163, 115, 0.035) 0%, transparent 62%),
+      radial-gradient(80% 60% at 100% 100%, rgba(98, 128, 105, 0.035) 0%, transparent 68%);
+  }
+
+  .grain-overlay::after {
+    display: none;
+  }
+
+  .warm-card {
+    background: linear-gradient(180deg, rgba(43, 47, 42, 0.98) 0%, rgba(29, 34, 30, 0.98) 100%);
+  }
+}
+
 @keyframes goblin-breathe {
   0%, 100% { transform: scale(1); }
-  50%      { transform: scale(1.018); }
+  50% { transform: scale(1.018); }
 }
+
 @keyframes goblin-sway {
   0%, 100% { transform: rotate(-0.4deg); }
-  50%      { transform: rotate(0.4deg); }
+  50% { transform: rotate(0.4deg); }
 }
+
 .goblin-wrap {
   pointer-events: none;
   filter: drop-shadow(0 10px 24px rgba(0,0,0,0.45));
   transition: filter 1.2s ease-out;
 }
-.goblin-breathe { animation: goblin-breathe 4.2s ease-in-out infinite; transform-origin: 50% 100%; }
-.goblin-sway    { animation: goblin-sway 9s ease-in-out infinite; transform-origin: 50% 100%; }
-.goblin-wrap img { transition: filter 1.2s ease-out; }
 
-/* Soft amber glow behind the goblin to bed her into the room */
+.goblin-breathe {
+  animation: goblin-breathe 4.2s ease-in-out infinite;
+  transform-origin: 50% 100%;
+}
+
+.goblin-sway {
+  animation: goblin-sway 9s ease-in-out infinite;
+  transform-origin: 50% 100%;
+}
+
+.goblin-wrap img {
+  transition: filter 1.2s ease-out;
+}
+
 .goblin-glow {
   position: absolute;
   inset: -10% -10% -5% -10%;
@@ -163,5 +190,4 @@ body {
   z-index: -1;
 }
 
-/* Layered content above grain */
 .content-layer { position: relative; z-index: 2; }

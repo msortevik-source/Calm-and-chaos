@@ -42,7 +42,7 @@ export default function Shell() {
           </div>
         </aside>
 
-        <header className="md:hidden fixed top-0 left-0 right-0 z-30 bg-moss-900/95 backdrop-blur border-b border-moss-700/60">
+        <header className="md:hidden fixed top-0 left-0 right-0 z-30 bg-moss-900 border-b border-moss-700/70">
           <div className="flex items-center justify-between px-5 py-4">
             <div className="font-heading text-lg text-moss-50">Calm <span className="text-amber">&</span> Chaos</div>
           </div>
