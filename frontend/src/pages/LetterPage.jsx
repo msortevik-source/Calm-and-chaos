@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { api } from "../lib/api";
 import { renderBody } from "../lib/markdown";
 import { Mail, RefreshCw, Loader2 } from "lucide-react";
@@ -13,20 +13,18 @@ export default function LetterPage() {
   const [current, setCurrent] = useState(null);
   const [busy, setBusy] = useState(false);
 
-  const loadArchive = async () => {
+  const loadArchive = useCallback(async () => {
     const r = await api.get("/letter/archive?limit=20");
     setLetters(r.data.letters || []);
-    if (!current && r.data.letters && r.data.letters.length) {
-      setCurrent(r.data.letters[0]);
-    }
-  };
+    setCurrent((prev) => prev || r.data.letters?.[0] || null);
+  }, []);
 
   const generateOrFetch = async (force = false) => {
     setBusy(true);
     try {
       const r = await api.get(`/letter/current${force ? "?force=true" : ""}`, { timeout: 60000 });
       setCurrent(r.data);
-      loadArchive();
+      await loadArchive();
     } catch (e) {
       toast("The goblin can't write right now.", { description: e?.response?.data?.detail || "" });
     } finally {
@@ -36,7 +34,7 @@ export default function LetterPage() {
 
   useEffect(() => {
     loadArchive();
-  }, []);
+  }, [loadArchive]);
 
   return (
     <div className="px-6 md:px-12 py-10 md:py-16 max-w-4xl mx-auto" data-testid="letter-page">
