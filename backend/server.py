@@ -742,6 +742,22 @@ def _strava_token_preview(token: Optional[Dict[str, Any]]):
         "expires_in_seconds": expires_in,
     }
 
+async def _record_strava_debug(event: str, detail: Optional[Dict[str, Any]] = None):
+    doc = {
+        "provider": "strava",
+        "event": event,
+        "detail": detail or {},
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+    try:
+        await db.oauth_debug.insert_one(doc)
+        await db.oauth_debug.delete_many({
+            "provider": "strava",
+            "timestamp": {"$lt": (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()},
+        })
+    except Exception:
+        logging.warning("mongo unavailable for Strava debug write")
+
 def _strava_exchange_code(code: str) -> Dict[str, Any]:
     response = _http.post(
         "https://www.strava.com/oauth/token",
@@ -1651,12 +1667,41 @@ async def strava_status():
         "redirect_uri": STRAVA_REDIRECT_URI,
     }
 
+@api_router.get("/strava/debug")
+async def strava_debug():
+    token = await _read_strava_token()
+    events = []
+    try:
+        events = await db.oauth_debug.find(
+            {"provider": "strava"},
+            {"_id": 0},
+        ).sort("timestamp", -1).to_list(10)
+    except Exception:
+        logging.warning("mongo unavailable for Strava debug read")
+    return {
+        "configured": _strava_configured(),
+        "client_id_present": bool(STRAVA_CLIENT_ID),
+        "client_secret_present": bool(STRAVA_CLIENT_SECRET),
+        "app_public_url": APP_PUBLIC_URL,
+        "frontend_url": FRONTEND_URL,
+        "redirect_uri": STRAVA_REDIRECT_URI,
+        "linked": bool(token),
+        "athlete": (_strava_token_preview(token) or {}).get("athlete") if token else None,
+        "recent_events": events,
+    }
+
 @api_router.get("/oauth/strava/login")
 async def strava_login(redirect: bool = False):
     if not _strava_configured():
+        await _record_strava_debug("login_not_configured", {
+            "client_id_present": bool(STRAVA_CLIENT_ID),
+            "client_secret_present": bool(STRAVA_CLIENT_SECRET),
+            "redirect_uri": STRAVA_REDIRECT_URI,
+        })
         if redirect:
-            return RedirectResponse(f"{FRONTEND_URL}/training?strava=error")
+            return RedirectResponse(f"{FRONTEND_URL}/training?strava=error&reason=not_configured")
         raise HTTPException(status_code=500, detail="Strava is not configured")
+    await _record_strava_debug("login_started", {"redirect": redirect, "redirect_uri": STRAVA_REDIRECT_URI})
     if redirect:
         return RedirectResponse(_strava_authorize_url())
     return {"url": _strava_authorize_url()}
@@ -1664,17 +1709,27 @@ async def strava_login(redirect: bool = False):
 @api_router.get("/oauth/strava/callback")
 async def strava_callback(code: Optional[str] = None, error: Optional[str] = None):
     if error:
-        return RedirectResponse(f"{FRONTEND_URL}/training?strava=error")
+        await _record_strava_debug("callback_error", {"error": error})
+        return RedirectResponse(f"{FRONTEND_URL}/training?strava=error&reason={error}")
     if not code:
+        await _record_strava_debug("callback_missing_code")
         raise HTTPException(status_code=400, detail="missing Strava code")
     if not _strava_configured():
+        await _record_strava_debug("callback_not_configured")
         raise HTTPException(status_code=500, detail="Strava is not configured")
     try:
+        await _record_strava_debug("callback_code_received")
         token = _strava_exchange_code(code)
         await _write_strava_token(token)
+        saved = await _read_strava_token()
+        await _record_strava_debug("token_saved", {
+            "linked_after_save": bool(saved),
+            "athlete_id": ((saved or {}).get("athlete") or {}).get("id"),
+        })
     except Exception:
         logging.exception("Strava OAuth callback failed")
-        return RedirectResponse(f"{FRONTEND_URL}/training?strava=error")
+        await _record_strava_debug("token_exchange_failed")
+        return RedirectResponse(f"{FRONTEND_URL}/training?strava=error&reason=token_exchange_failed")
     return RedirectResponse(f"{FRONTEND_URL}/training?strava=linked")
 
 @api_router.post("/strava/unlink")

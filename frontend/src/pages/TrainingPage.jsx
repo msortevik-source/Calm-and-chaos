@@ -175,7 +175,9 @@ export default function TrainingPage() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get("strava") === "linked") toast("Strava linked. Tiny victory parade, very restrained.");
-    if (params.get("strava") === "error") toast("Strava got weird. Try linking again.");
+    if (params.get("strava") === "error") {
+      toast("Strava got weird.", { description: params.get("reason") || "No reason returned. Very helpful, obviously." });
+    }
     load();
   }, []);
 
