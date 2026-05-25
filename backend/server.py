@@ -2486,10 +2486,17 @@ async def calendar_today():
 
 app.include_router(api_router)
 
+cors_origins = {
+    "https://calm-and-chaos.vercel.app",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+}
+cors_origins.update(origin.strip() for origin in os.environ.get("CORS_ORIGINS", "").split(",") if origin.strip())
+
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
+    allow_origins=sorted(cors_origins),
     allow_methods=["*"],
     allow_headers=["*"],
 )

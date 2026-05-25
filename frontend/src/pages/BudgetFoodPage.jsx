@@ -9,6 +9,7 @@ import {
   markSpendingCheckin,
   saveBudgetSetup,
   saveFoodV1,
+  BUILD_MARKER,
 } from "../lib/api";
 
 const todayIso = () => new Date().toISOString().slice(0, 10);
@@ -135,7 +136,10 @@ function BudgetV1() {
           </div>
           <h2 className="font-heading text-3xl text-moss-50">Where does it go?</h2>
         </div>
-        <input data-testid="budget-month" type="month" value={month} onChange={(e) => setMonth(e.target.value)} className={inputCls + " w-44"} />
+        <div className="flex flex-col items-start md:items-end gap-2">
+          <input data-testid="budget-month" type="month" value={month} onChange={(e) => setMonth(e.target.value)} className={inputCls + " w-44"} />
+          <div className="text-[10px] text-moss-200/50">{BUILD_MARKER}</div>
+        </div>
       </div>
 
       <div className="warm-card rounded-2xl p-4" data-testid="monthly-snapshot">
