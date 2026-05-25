@@ -146,6 +146,7 @@ export default function TrainingPage() {
   const [busy, setBusy] = useState(false);
   const [strava, setStrava] = useState({ configured: true, linked: false });
   const [stravaBusy, setStravaBusy] = useState(false);
+  const [stravaImportNote, setStravaImportNote] = useState("");
 
   const selectedDay = sessionDay(session, longRunDay);
   const workout = useMemo(() => template[selectedDay] || {}, [template, selectedDay]);
@@ -285,14 +286,18 @@ export default function TrainingPage() {
 
   const importStrava = async () => {
     setStravaBusy(true);
+    setStravaImportNote("Importing recent activities...");
     try {
       const res = await stravaImport({ limit: 10 });
       await load();
+      setStravaImportNote(`Imported ${res.imported_count || 0}. Skipped ${res.skipped_count || 0}.`);
       toast(`Imported ${res.imported_count || 0} from Strava.`, {
         description: res.imported_count ? "Quiet evidence acquired." : "Nothing new. Suspiciously calm.",
       });
-    } catch {
-      toast("Couldn't import Strava activities.");
+    } catch (e) {
+      const detail = e?.response?.data?.detail || e?.message || "No useful error returned. Rude.";
+      setStravaImportNote(`Import failed: ${detail}`);
+      toast("Couldn't import Strava activities.", { description: detail });
     } finally {
       setStravaBusy(false);
     }
@@ -418,7 +423,7 @@ export default function TrainingPage() {
             {strava.linked && (
               <>
                 <button data-testid="strava-import" disabled={stravaBusy} onClick={importStrava} className="pill-btn primary rounded-full px-5 py-2 text-xs inline-flex items-center gap-2 disabled:opacity-40">
-                  <RefreshCw size={13} /> Import recent
+                  <RefreshCw size={13} className={stravaBusy ? "animate-spin" : ""} /> {stravaBusy ? "Importing" : "Import recent"}
                 </button>
                 <button data-testid="strava-unlink" disabled={stravaBusy} onClick={unlinkStrava} className="pill-btn rounded-full px-5 py-2 text-xs inline-flex items-center gap-2 disabled:opacity-40">
                   <Unlink size={13} /> Unlink
@@ -426,6 +431,7 @@ export default function TrainingPage() {
               </>
             )}
           </div>
+          {stravaImportNote && <p className="text-xs text-moss-200 mt-3 md:text-right">{stravaImportNote}</p>}
         </div>
       </div>
 

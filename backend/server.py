@@ -1763,9 +1763,15 @@ async def strava_import(req: StravaImportRequest):
         raise HTTPException(status_code=502, detail=f"Strava refused to cooperate: {exc}")
 
     allowed_types = {t.lower() for t in (req.types or ["run", "trailrun", "virtualrun", "ride", "walk"])}
+    try:
+        existing_docs = await db.training.find({"strava_id": {"$exists": True}}, {"_id": 0, "strava_id": 1}).to_list(1000)
+    except Exception:
+        logging.warning("mongo unavailable for Strava duplicate check; using local fallback")
+        existing_docs = []
     store = _read_life_store()
     store.setdefault("training", [])
-    existing_ids = {str(t.get("strava_id")) for t in store["training"] if t.get("strava_id")}
+    existing_ids = {str(t.get("strava_id")) for t in existing_docs if t.get("strava_id")}
+    existing_ids.update({str(t.get("strava_id")) for t in store["training"] if t.get("strava_id")})
     imported = []
     skipped = 0
     for activity in activities:
@@ -1781,7 +1787,11 @@ async def strava_import(req: StravaImportRequest):
         if not entry:
             skipped += 1
             continue
-        store["training"].append(entry)
+        try:
+            await db.training.insert_one(entry)
+        except Exception:
+            logging.warning("mongo unavailable for Strava import save; using local fallback")
+            store["training"].append(entry)
         existing_ids.add(strava_id)
         imported.append(entry)
     store["training"] = store["training"][-500:]
