@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { CalendarDays, Link as LinkIcon, RefreshCw } from "lucide-react";
 import { calendarStatus, calendarToday, API } from "../lib/api";
+import { toast } from "sonner";
 
 function fmtTime(iso, all_day) {
   if (!iso) return "";
@@ -31,7 +32,19 @@ export default function CalendarSnapshot() {
     } finally { setLoading(false); }
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("calendar") === "linked") {
+      setLinked(true);
+      toast("Calendar linked.");
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+    if (params.get("calendar") === "error") {
+      toast("Calendar link failed.", { description: params.get("reason") || "Google did not give a useful reason." });
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+    load();
+  }, []);
 
   const connect = () => {
     window.location.href = `${API}/oauth/calendar/login?redirect=true`;

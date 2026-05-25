@@ -1798,8 +1798,20 @@ async def _strava_import_recent(limit: int = 10, types: Optional[List[str]] = No
     return {"imported": imported, "imported_count": len(imported), "skipped_count": skipped}
 
 @api_router.get("/strava/import/recent")
-async def strava_import_recent(limit: int = 10):
-    return await _strava_import_recent(limit=limit)
+async def strava_import_recent(limit: int = 10, redirect: bool = False):
+    try:
+        result = await _strava_import_recent(limit=limit)
+    except Exception as exc:
+        if redirect:
+            return RedirectResponse(f"{FRONTEND_URL}/training?strava_import=error&reason={type(exc).__name__}")
+        raise
+    if redirect:
+        return RedirectResponse(
+            f"{FRONTEND_URL}/training?strava_import=done"
+            f"&imported={result.get('imported_count', 0)}"
+            f"&skipped={result.get('skipped_count', 0)}"
+        )
+    return result
 
 @api_router.post("/strava/import")
 async def strava_import(req: StravaImportRequest):
@@ -2232,6 +2244,22 @@ async def _calendar_token_delete():
 async def calendar_status():
     doc = await _calendar_token_get()
     return {"linked": bool(doc and doc.get("refresh_token")), "email": (doc or {}).get("email")}
+
+@api_router.get("/calendar/debug")
+async def calendar_debug():
+    doc = await _calendar_token_get()
+    return {
+        "configured": bool(GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET),
+        "client_id_present": bool(GOOGLE_CLIENT_ID),
+        "client_secret_present": bool(GOOGLE_CLIENT_SECRET),
+        "app_public_url": APP_PUBLIC_URL,
+        "frontend_url": FRONTEND_URL,
+        "redirect_uri": REDIRECT_URI,
+        "linked": bool(doc and doc.get("refresh_token")),
+        "email": (doc or {}).get("email"),
+        "has_access_token": bool((doc or {}).get("access_token")),
+        "has_refresh_token": bool((doc or {}).get("refresh_token")),
+    }
 
 @api_router.get("/oauth/calendar/login")
 async def oauth_login(redirect: bool = False):

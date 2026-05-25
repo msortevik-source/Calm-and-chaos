@@ -4,7 +4,6 @@ import {
   listTraining,
   createTraining,
   deleteTraining,
-  stravaImport,
   stravaStatus,
   stravaUnlink,
   API,
@@ -175,13 +174,32 @@ export default function TrainingPage() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
+    let cleanUrl = false;
     if (params.get("strava") === "linked") {
       setStrava((prev) => ({ ...prev, configured: true, linked: true }));
       toast("Strava linked. Tiny victory parade, very restrained.");
-      window.history.replaceState({}, "", window.location.pathname);
+      cleanUrl = true;
     }
     if (params.get("strava") === "error") {
       toast("Strava got weird.", { description: params.get("reason") || "No reason returned. Very helpful, obviously." });
+      cleanUrl = true;
+    }
+    if (params.get("strava_import") === "done") {
+      const imported = params.get("imported") || "0";
+      const skipped = params.get("skipped") || "0";
+      setStravaImportNote(`Imported ${imported}. Skipped ${skipped}.`);
+      toast(`Imported ${imported} from Strava.`, {
+        description: Number(imported) ? "Training log updated." : "Nothing new. Suspiciously calm.",
+      });
+      cleanUrl = true;
+    }
+    if (params.get("strava_import") === "error") {
+      const reason = params.get("reason") || "import_failed";
+      setStravaImportNote(`Import failed: ${reason}`);
+      toast("Couldn't import Strava activities.", { description: reason });
+      cleanUrl = true;
+    }
+    if (cleanUrl) {
       window.history.replaceState({}, "", window.location.pathname);
     }
     load();
@@ -287,20 +305,7 @@ export default function TrainingPage() {
   const importStrava = async () => {
     setStravaBusy(true);
     setStravaImportNote("Importing recent activities...");
-    try {
-      const res = await stravaImport({ limit: 10 });
-      await load();
-      setStravaImportNote(`Imported ${res.imported_count || 0}. Skipped ${res.skipped_count || 0}.`);
-      toast(`Imported ${res.imported_count || 0} from Strava.`, {
-        description: res.imported_count ? "Quiet evidence acquired." : "Nothing new. Suspiciously calm.",
-      });
-    } catch (e) {
-      const detail = e?.response?.data?.detail || e?.message || "No useful error returned. Rude.";
-      setStravaImportNote(`Import failed: ${detail}`);
-      toast("Couldn't import Strava activities.", { description: detail });
-    } finally {
-      setStravaBusy(false);
-    }
+    window.location.href = `${API}/strava/import/recent?limit=10&redirect=true`;
   };
 
   const unlinkStrava = async () => {
