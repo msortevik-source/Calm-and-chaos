@@ -53,6 +53,10 @@ function BudgetV1() {
     setSetup((prev) => ({ ...prev, [group]: { ...prev[group], [key]: value } }));
   };
 
+  const setNote = (group, key, value) => {
+    setSetup((prev) => ({ ...prev, [group]: { ...(prev[group] || {}), [key]: value } }));
+  };
+
   const setFixedActive = (key, checked) => {
     setSetup((prev) => ({
       ...prev,
@@ -79,7 +83,9 @@ function BudgetV1() {
       await saveBudgetSetup({
         month,
         income: setup.income,
+        income_notes: setup.income_notes || {},
         fixed_expenses: setup.fixed_expenses,
+        fixed_notes: setup.fixed_notes || {},
         fixed_active: setup.fixed_active || {},
       });
       await load();
@@ -116,6 +122,8 @@ function BudgetV1() {
   const incomeEntries = Object.entries(setup.income || {});
   const fixedEntries = Object.entries(setup.fixed_expenses || {});
   const fixedActive = setup.fixed_active || summary.fixed_active || {};
+  const incomeNotes = setup.income_notes || {};
+  const fixedNotes = setup.fixed_notes || {};
   const resetWindow = "11th/12th-ish";
 
   return (
@@ -165,9 +173,10 @@ function BudgetV1() {
               <div className="text-xs uppercase tracking-[0.22em] text-moss-200/70 mb-3">income</div>
               <div className="space-y-2">
                 {incomeEntries.map(([key, value]) => (
-                  <label key={key} className="grid grid-cols-[1fr_110px] gap-2 items-center text-sm text-moss-100">
+                  <label key={key} className="grid grid-cols-[1fr_110px] md:grid-cols-[1fr_110px_150px] gap-2 items-center text-sm text-moss-100">
                     <span>{key}</span>
                     <input type="number" value={value || ""} onChange={(e) => setMoney("income", key, e.target.value)} className={inputCls} />
+                    <input value={incomeNotes[key] || ""} onChange={(e) => setNote("income_notes", key, e.target.value)} placeholder="note" className={inputCls} />
                   </label>
                 ))}
               </div>
@@ -180,10 +189,11 @@ function BudgetV1() {
               <div className="text-xs uppercase tracking-[0.22em] text-moss-200/70 mb-3">fixed expenses</div>
               <div className="space-y-2 max-h-[340px] overflow-auto pr-1">
                 {fixedEntries.map(([key, value]) => (
-                  <label key={key} className="grid grid-cols-[auto_1fr_110px] gap-2 items-center text-sm text-moss-100">
+                  <label key={key} className="grid grid-cols-[auto_1fr_110px] md:grid-cols-[auto_1fr_110px_150px] gap-2 items-center text-sm text-moss-100">
                     <input type="checkbox" checked={fixedActive[key] !== false} onChange={(e) => setFixedActive(key, e.target.checked)} />
                     <span className={fixedActive[key] === false ? "text-moss-200/50 line-through" : ""}>{key}</span>
                     <input type="number" value={value || ""} onChange={(e) => setMoney("fixed_expenses", key, e.target.value)} className={inputCls} />
+                    <input value={fixedNotes[key] || ""} onChange={(e) => setNote("fixed_notes", key, e.target.value)} placeholder="note" className={inputCls} />
                   </label>
                 ))}
               </div>

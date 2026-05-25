@@ -163,7 +163,9 @@ class MealEntry(MealCreate):
 class BudgetSetup(BaseModel):
     month: Optional[str] = None
     income: Dict[str, float] = Field(default_factory=dict)
+    income_notes: Dict[str, str] = Field(default_factory=dict)
     fixed_expenses: Dict[str, float] = Field(default_factory=dict)
+    fixed_notes: Dict[str, str] = Field(default_factory=dict)
     fixed_active: Dict[str, bool] = Field(default_factory=dict)
 
 class SpendingCreate(BaseModel):
@@ -240,22 +242,22 @@ DEFAULT_FIXED_EXPENSES = {
     "Phone": 0,
     "Student loan": 0,
     "Savings": 0,
-    "Me-money": 0,
     "Debt": 0,
     "Streaming": 0,
     "ChatGPT": 0,
     "Gym": 0,
+    "Me-money": 0,
 }
 
 SPENDING_CATEGORIES = [
     "groceries",
     "snus",
-    "Monster/energy drinks",
-    "candy/snacks",
+    "Monster / energy drink",
+    "candy / snacks",
     "takeaway",
     "coffee",
     "transport",
-    "random chaos purchases",
+    "random nonsense",
     "other",
 ]
 
@@ -336,11 +338,15 @@ def _normalize_spending_category(category: str) -> str:
     raw = (category or "other").strip()
     lowered = raw.lower()
     aliases = {
-        "monster/energy drinks": "Monster/energy drinks",
-        "monster": "Monster/energy drinks",
-        "energy drinks": "Monster/energy drinks",
-        "random nonsense": "random chaos purchases",
-        "random chaos": "random chaos purchases",
+        "monster/energy drinks": "Monster / energy drink",
+        "monster / energy drinks": "Monster / energy drink",
+        "monster": "Monster / energy drink",
+        "energy drinks": "Monster / energy drink",
+        "energy drink": "Monster / energy drink",
+        "candy/snacks": "candy / snacks",
+        "snacks": "candy / snacks",
+        "random chaos purchases": "random nonsense",
+        "random chaos": "random nonsense",
     }
     if lowered in aliases:
         return aliases[lowered]
@@ -372,8 +378,8 @@ def _budget_summary(month: str, setup: Dict[str, Any], spending: List[Dict[str, 
     fixed_total = round(sum(fixed.values()), 2)
     income_total = round(sum(income.values()), 2)
     observations = []
-    monster_total = by_category.get("Monster/energy drinks", 0) + by_category.get("monster/energy drinks", 0)
-    chaos_total = by_category.get("random chaos purchases", 0) + by_category.get("random nonsense", 0)
+    monster_total = by_category.get("Monster / energy drink", 0)
+    chaos_total = by_category.get("random nonsense", 0)
     if monster_total > 0:
         observations.append("Monster spending has entered the chat. Not judging. Noting.")
     if chaos_total > by_category.get("groceries", 0) and chaos_total > 0:
@@ -1871,8 +1877,18 @@ async def budget_v1(month: Optional[str] = None):
     setup = store["budget_setups"].get(month) or {
         "month": month,
         "income": DEFAULT_INCOME,
+        "income_notes": {},
         "fixed_expenses": DEFAULT_FIXED_EXPENSES,
+        "fixed_notes": {},
         "fixed_active": {key: True for key in DEFAULT_FIXED_EXPENSES},
+    }
+    setup = {
+        **setup,
+        "income": {**DEFAULT_INCOME, **setup.get("income", {})},
+        "income_notes": setup.get("income_notes", {}),
+        "fixed_expenses": {**DEFAULT_FIXED_EXPENSES, **setup.get("fixed_expenses", {})},
+        "fixed_notes": setup.get("fixed_notes", {}),
+        "fixed_active": {key: setup.get("fixed_active", {}).get(key, True) for key in {**DEFAULT_FIXED_EXPENSES, **setup.get("fixed_expenses", {})}},
     }
     spending = [s for s in store["spending"] if (s.get("date") or "").startswith(month)]
     summary = _budget_summary(month, setup, store["spending"])
@@ -1891,7 +1907,9 @@ async def budget_v1_setup(req: BudgetSetup):
     setup = {
         "month": month,
         "income": _money_dict({**DEFAULT_INCOME, **req.income}),
+        "income_notes": {key: str(value or "") for key, value in req.income_notes.items()},
         "fixed_expenses": _money_dict({**DEFAULT_FIXED_EXPENSES, **req.fixed_expenses}),
+        "fixed_notes": {key: str(value or "") for key, value in req.fixed_notes.items()},
         "fixed_active": {
             key: bool(req.fixed_active.get(key, True))
             for key in {**DEFAULT_FIXED_EXPENSES, **req.fixed_expenses}
@@ -1935,7 +1953,9 @@ async def budget_v1_checkin(req: SpendingCheckinCreate):
     setup = store["budget_setups"].get(month) or {
         "month": month,
         "income": DEFAULT_INCOME,
+        "income_notes": {},
         "fixed_expenses": DEFAULT_FIXED_EXPENSES,
+        "fixed_notes": {},
         "fixed_active": {key: True for key in DEFAULT_FIXED_EXPENSES},
     }
     return {"ok": True, "summary": _budget_summary(month, setup, store["spending"])}
