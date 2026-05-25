@@ -63,6 +63,7 @@ const LOCAL_TEMPLATE = {
 const todayIso = () => new Date().toISOString().slice(0, 10);
 const weekdayKey = () => new Date().toLocaleDateString("en-US", { weekday: "long" }).toLowerCase();
 const inputCls = "bg-moss-800/60 border border-moss-700 rounded-xl px-3 py-2 text-sm text-moss-50 placeholder-moss-200/50 outline-none focus:border-amber/50 transition-colors";
+const STRAVA_LINKED_KEY = "calm_chaos_strava_linked";
 
 function defaultSession() {
   const day = weekdayKey();
@@ -174,8 +175,13 @@ export default function TrainingPage() {
       setEntries([]);
     }
 
+    const remembered = window.localStorage.getItem(STRAVA_LINKED_KEY) === "true";
+    if (remembered) setStrava((prev) => ({ ...prev, linked: true }));
     const s = await stravaStatus().catch(() => null);
-    if (s) setStrava((prev) => ({ ...s, linked: Boolean(s.linked || prev.linked) }));
+    if (s) {
+      if (s.linked) window.localStorage.setItem(STRAVA_LINKED_KEY, "true");
+      setStrava((prev) => ({ ...s, linked: Boolean(s.linked || prev.linked || remembered) }));
+    }
   };
 
   useEffect(() => {
@@ -183,6 +189,7 @@ export default function TrainingPage() {
     let cleanUrl = false;
     if (params.get("strava") === "linked") {
       setStrava((prev) => ({ ...prev, configured: true, linked: true }));
+      window.localStorage.setItem(STRAVA_LINKED_KEY, "true");
       toast("Strava linked. Tiny victory parade, very restrained.");
       cleanUrl = true;
     }
@@ -194,6 +201,7 @@ export default function TrainingPage() {
       const imported = params.get("imported") || "0";
       const skipped = params.get("skipped") || "0";
       setStrava((prev) => ({ ...prev, configured: true, linked: true }));
+      window.localStorage.setItem(STRAVA_LINKED_KEY, "true");
       setStravaImportNote(`Imported ${imported}. Skipped ${skipped}.`);
       toast(`Imported ${imported} from Strava.`, {
         description: Number(imported) ? "Training log updated." : "Nothing new. Suspiciously calm.",
@@ -333,6 +341,7 @@ export default function TrainingPage() {
     setStravaBusy(true);
     try {
       await stravaUnlink();
+      window.localStorage.removeItem(STRAVA_LINKED_KEY);
       setStrava((prev) => ({ ...prev, linked: false, athlete: null }));
       await load();
       toast("Strava unlinked.");

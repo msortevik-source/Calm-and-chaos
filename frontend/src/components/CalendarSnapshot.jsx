@@ -3,6 +3,8 @@ import { CalendarDays, Link as LinkIcon, RefreshCw } from "lucide-react";
 import { calendarStatus, calendarToday, API } from "../lib/api";
 import { toast } from "sonner";
 
+const CALENDAR_LINKED_KEY = "calm_chaos_calendar_linked";
+
 function fmtTime(iso, all_day) {
   if (!iso) return "";
   if (all_day) return "all day";
@@ -20,14 +22,18 @@ export default function CalendarSnapshot() {
   const load = async () => {
     setLoading(true);
     try {
+      const remembered = window.localStorage.getItem(CALENDAR_LINKED_KEY) === "true";
+      if (remembered) setLinked(true);
       const s = await calendarStatus();
-      setLinked(s.linked);
+      const isLinked = Boolean(s.linked || remembered);
+      setLinked(isLinked);
+      if (s.linked) window.localStorage.setItem(CALENDAR_LINKED_KEY, "true");
       if (s.linked) {
         const d = await calendarToday();
         setEvents(d.events || []);
       }
     } catch {
-      setLinked(false);
+      setLinked(window.localStorage.getItem(CALENDAR_LINKED_KEY) === "true");
       setEvents([]);
     } finally { setLoading(false); }
   };
@@ -36,6 +42,7 @@ export default function CalendarSnapshot() {
     const params = new URLSearchParams(window.location.search);
     if (params.get("calendar") === "linked") {
       setLinked(true);
+      window.localStorage.setItem(CALENDAR_LINKED_KEY, "true");
       toast("Calendar linked.");
       window.history.replaceState({}, "", window.location.pathname);
     }

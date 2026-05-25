@@ -664,7 +664,10 @@ async def _send_llm_message(system: str, text: str, mode: str = "send") -> str:
             instructions=system,
             input=text,
         )
-        return response.output_text.strip()
+        output = (response.output_text or "").strip()
+        if not output:
+            raise RuntimeError("OpenAI returned an empty response")
+        return output
 
     if EMERGENT_LLM_KEY:
         chat_obj = LlmChat(
@@ -728,6 +731,7 @@ async def _read_strava_token():
         return None
 
 async def _write_strava_token(token: Dict[str, Any]):
+    saved_to_mongo = False
     try:
         await db.oauth_tokens.update_one(
             {"provider": "strava"},
@@ -738,9 +742,15 @@ async def _write_strava_token(token: Dict[str, Any]):
             }},
             upsert=True,
         )
+        saved_to_mongo = True
     except Exception:
         logging.warning("mongo unavailable for Strava token write; using local fallback")
-    LOCAL_STRAVA_TOKEN_FILE.write_text(json.dumps(token, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
+    try:
+        LOCAL_STRAVA_TOKEN_FILE.write_text(json.dumps(token, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
+    except Exception:
+        logging.exception("failed writing local Strava token fallback")
+        if not saved_to_mongo:
+            raise
 
 async def _delete_strava_token():
     try:
@@ -1539,7 +1549,7 @@ async def chat(req: ChatRequest):
         reply_text = await _send_llm_message(system, composed, mode=req.mode)
     except Exception as e:
         logging.exception("LLM error")
-        raise HTTPException(status_code=502, detail=f"goblin is quiet right now: {e}")
+        raise HTTPException(status_code=502, detail=f"Analysis engine did not return: {e}")
 
     assistant_msg = ChatMessage(role="assistant", text=str(reply_text).strip(), mode=req.mode)
     a_doc = assistant_msg.model_dump()
@@ -2341,15 +2351,22 @@ async def _calendar_token_get():
         return _read_local_calendar_token()
 
 async def _calendar_token_save(doc):
+    saved_to_mongo = False
     try:
         await db.google_tokens.update_one(
             {"user_id": SINGLE_USER_ID},
             {"$set": doc},
             upsert=True,
         )
+        saved_to_mongo = True
     except Exception:
         logging.exception("mongo unavailable for calendar token save; using local fallback")
+    try:
         _write_local_calendar_token(doc)
+    except Exception:
+        logging.exception("failed writing local calendar token fallback")
+        if not saved_to_mongo:
+            raise
 
 async def _calendar_token_update(update):
     doc = await _calendar_token_get() or {"user_id": SINGLE_USER_ID}

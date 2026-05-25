@@ -56,9 +56,11 @@ export default function ConversationPage() {
     setMessages([]);
   };
 
-  const showSummaryPlaceholder = (type) => {
-    setSummaryPlaceholder(type);
-    window.setTimeout(() => endRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
+  const requestSummary = (type) => {
+    const prompt = type === "weekly"
+      ? "Give me a weekly summary from the app data. Include training completed/missed, Strava runs, gym sessions, food consistency, budget/spending overview, calendar/recovery notes if useful, small pattern observations, and one practical adjustment for next week."
+      : "Give me a monthly summary from the app data. Include training sessions, running volume, long-run/easy-run trend, strength progression, budget income/fixed/flexible/category breakdown, food consistency, what quietly improved, main friction point, and one practical adjustment for next month.";
+    submit(prompt, "send");
   };
 
   return (
@@ -76,10 +78,10 @@ export default function ConversationPage() {
       <div className="warm-card rounded-3xl p-5 mb-8" data-testid="summary-actions">
         <div className="text-xs uppercase tracking-[0.25em] text-moss-200/70 mb-3">Summaries</div>
         <div className="flex flex-wrap gap-3">
-          <button data-testid="weekly-summary-button" onClick={() => showSummaryPlaceholder("weekly")} className="pill-btn primary rounded-full px-5 py-2 text-xs inline-flex items-center gap-2">
+          <button data-testid="weekly-summary-button" disabled={busy} onClick={() => requestSummary("weekly")} className="pill-btn primary rounded-full px-5 py-2 text-xs inline-flex items-center gap-2 disabled:opacity-40">
             <CalendarDays size={14} /> Weekly Summary
           </button>
-          <button data-testid="monthly-summary-button" onClick={() => showSummaryPlaceholder("monthly")} className="pill-btn rounded-full px-5 py-2 text-xs inline-flex items-center gap-2">
+          <button data-testid="monthly-summary-button" disabled={busy} onClick={() => requestSummary("monthly")} className="pill-btn rounded-full px-5 py-2 text-xs inline-flex items-center gap-2 disabled:opacity-40">
             <CalendarRange size={14} /> Monthly Summary
           </button>
         </div>

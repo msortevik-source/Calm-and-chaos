@@ -47,8 +47,9 @@ export default function ChatInput({ onSubmit, busy, compact = false, placeholder
         </div>
       </div>
       <div className="text-[11px] text-moss-200/60 mt-2 pl-2 tracking-wide">
-        ⌘/Ctrl + Enter to send
+        Cmd/Ctrl + Enter to send
       </div>
     </div>
   );
 }
+
