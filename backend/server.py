@@ -670,7 +670,14 @@ def _local_chat_history(limit: int = 12):
     docs = _read_local_chat_messages()
     return docs[-limit:]
 
-def _read_strava_token():
+async def _read_strava_token():
+    try:
+        doc = await db.oauth_tokens.find_one({"provider": "strava"}, {"_id": 0})
+        if doc:
+            return doc.get("token") or doc
+    except Exception:
+        logging.warning("mongo unavailable for Strava token read; using local fallback")
+
     if not LOCAL_STRAVA_TOKEN_FILE.exists():
         return None
     try:
@@ -679,10 +686,26 @@ def _read_strava_token():
         logging.exception("failed reading local Strava token")
         return None
 
-def _write_strava_token(token: Dict[str, Any]):
+async def _write_strava_token(token: Dict[str, Any]):
+    try:
+        await db.oauth_tokens.update_one(
+            {"provider": "strava"},
+            {"$set": {
+                "provider": "strava",
+                "token": token,
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }},
+            upsert=True,
+        )
+    except Exception:
+        logging.warning("mongo unavailable for Strava token write; using local fallback")
     LOCAL_STRAVA_TOKEN_FILE.write_text(json.dumps(token, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
 
-def _delete_strava_token():
+async def _delete_strava_token():
+    try:
+        await db.oauth_tokens.delete_one({"provider": "strava"})
+    except Exception:
+        logging.warning("mongo unavailable for Strava token delete; using local fallback only")
     try:
         LOCAL_STRAVA_TOKEN_FILE.unlink(missing_ok=True)
     except Exception:
@@ -733,7 +756,7 @@ def _strava_exchange_code(code: str) -> Dict[str, Any]:
     response.raise_for_status()
     return response.json()
 
-def _strava_refresh_token(token: Dict[str, Any]) -> Dict[str, Any]:
+async def _strava_refresh_token(token: Dict[str, Any]) -> Dict[str, Any]:
     response = _http.post(
         "https://www.strava.com/oauth/token",
         data={
@@ -747,21 +770,21 @@ def _strava_refresh_token(token: Dict[str, Any]) -> Dict[str, Any]:
     response.raise_for_status()
     refreshed = response.json()
     merged = {**token, **refreshed}
-    _write_strava_token(merged)
+    await _write_strava_token(merged)
     return merged
 
-def _strava_access_token() -> str:
-    token = _read_strava_token()
+async def _strava_access_token() -> str:
+    token = await _read_strava_token()
     if not token:
         raise HTTPException(status_code=401, detail="Strava is not linked")
     expires_at = int(token.get("expires_at") or 0)
     now = int(datetime.now(timezone.utc).timestamp())
     if expires_at <= now + 60:
-        token = _strava_refresh_token(token)
+        token = await _strava_refresh_token(token)
     return token["access_token"]
 
-def _strava_fetch_activities(limit: int = 10) -> List[Dict[str, Any]]:
-    access_token = _strava_access_token()
+async def _strava_fetch_activities(limit: int = 10) -> List[Dict[str, Any]]:
+    access_token = await _strava_access_token()
     response = _http.get(
         "https://www.strava.com/api/v3/athlete/activities",
         headers={"Authorization": f"Bearer {access_token}"},
@@ -1620,7 +1643,7 @@ async def training_delete(entry_id: str):
 # Strava OAuth + activity import
 @api_router.get("/strava/status")
 async def strava_status():
-    token = _read_strava_token()
+    token = await _read_strava_token()
     return {
         "configured": _strava_configured(),
         "linked": bool(token),
@@ -1648,7 +1671,7 @@ async def strava_callback(code: Optional[str] = None, error: Optional[str] = Non
         raise HTTPException(status_code=500, detail="Strava is not configured")
     try:
         token = _strava_exchange_code(code)
-        _write_strava_token(token)
+        await _write_strava_token(token)
     except Exception:
         logging.exception("Strava OAuth callback failed")
         return RedirectResponse(f"{FRONTEND_URL}/training?strava=error")
@@ -1656,7 +1679,7 @@ async def strava_callback(code: Optional[str] = None, error: Optional[str] = Non
 
 @api_router.post("/strava/unlink")
 async def strava_unlink():
-    _delete_strava_token()
+    await _delete_strava_token()
     return {"ok": True}
 
 @api_router.get("/strava/activities")
@@ -1664,7 +1687,7 @@ async def strava_activities(limit: int = 10):
     if not _strava_configured():
         raise HTTPException(status_code=500, detail="Strava is not configured")
     try:
-        activities = _strava_fetch_activities(limit)
+        activities = await _strava_fetch_activities(limit)
     except HTTPException:
         raise
     except Exception as exc:
@@ -1677,7 +1700,7 @@ async def strava_import(req: StravaImportRequest):
     if not _strava_configured():
         raise HTTPException(status_code=500, detail="Strava is not configured")
     try:
-        activities = _strava_fetch_activities(req.limit)
+        activities = await _strava_fetch_activities(req.limit)
     except HTTPException:
         raise
     except Exception as exc:
