@@ -163,7 +163,8 @@ export default function TrainingPage() {
       const [t, e] = await Promise.all([getTemplate(), listTraining()]);
       setTemplate({ ...LOCAL_TEMPLATE, ...(t.template || {}) });
       setEntries(e.entries || []);
-    } catch {
+    } catch (e) {
+      toast("Training log did not load.", { description: e?.response?.data?.detail || e?.message || "" });
       const t = await getTemplate().catch(() => ({ template: {} }));
       setTemplate({ ...LOCAL_TEMPLATE, ...(t.template || {}) });
       setEntries([]);
@@ -286,8 +287,8 @@ export default function TrainingPage() {
       await Promise.all(tasks);
       await load();
       toast("Saved.", { description: "Continue, not start over." });
-    } catch {
-      toast("Couldn't save workout.");
+    } catch (e) {
+      toast("Couldn't save workout.", { description: e?.response?.data?.detail || e?.message || "No useful error returned." });
     } finally {
       setBusy(false);
     }

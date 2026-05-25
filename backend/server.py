@@ -164,6 +164,7 @@ class BudgetSetup(BaseModel):
     month: Optional[str] = None
     income: Dict[str, float] = Field(default_factory=dict)
     fixed_expenses: Dict[str, float] = Field(default_factory=dict)
+    fixed_active: Dict[str, bool] = Field(default_factory=dict)
 
 class SpendingCreate(BaseModel):
     amount: float
@@ -225,9 +226,10 @@ def time_of_day_now():
     return "late_night"
 
 DEFAULT_INCOME = {
-    "Salary (12th)": 0,
-    "Child support (4th)": 0,
-    "Child maintenance (30/31)": 0,
+    "Salary": 0,
+    "Child support": 0,
+    "Child maintenance": 0,
+    "Other income": 0,
 }
 
 DEFAULT_FIXED_EXPENSES = {
@@ -236,7 +238,7 @@ DEFAULT_FIXED_EXPENSES = {
     "Food account": 0,
     "Bus": 0,
     "Phone": 0,
-    "Student debt": 0,
+    "Student loan": 0,
     "Savings": 0,
     "Me-money": 0,
     "Debt": 0,
@@ -349,7 +351,11 @@ def _normalize_spending_category(category: str) -> str:
 
 def _budget_summary(month: str, setup: Dict[str, Any], spending: List[Dict[str, Any]]) -> Dict[str, Any]:
     income = _money_dict({**DEFAULT_INCOME, **setup.get("income", {})})
-    fixed = _money_dict({**DEFAULT_FIXED_EXPENSES, **setup.get("fixed_expenses", {})})
+    fixed_all = _money_dict({**DEFAULT_FIXED_EXPENSES, **setup.get("fixed_expenses", {})})
+    fixed_active = {key: bool(value) for key, value in setup.get("fixed_active", {}).items()}
+    for key in fixed_all:
+        fixed_active.setdefault(key, True)
+    fixed = {key: value for key, value in fixed_all.items() if fixed_active.get(key, True)}
     month_spending = [s for s in spending if (s.get("date") or "").startswith(month)]
     by_category: Dict[str, float] = {}
     for entry in month_spending:
@@ -376,7 +382,9 @@ def _budget_summary(month: str, setup: Dict[str, Any], spending: List[Dict[str, 
         observations.append(f"Days checked in this month: {checked_days}/{_days_in_month(month)}. Noticing is the win.")
     return {
         "income": income,
-        "fixed_expenses": fixed,
+        "fixed_expenses": fixed_all,
+        "fixed_active": fixed_active,
+        "active_fixed_expenses": fixed,
         "income_total": income_total,
         "fixed_total": fixed_total,
         "flexible_total": flexible_total,
@@ -1634,7 +1642,7 @@ async def training_create(req: TrainingCreate):
     try:
         await db.training.insert_one(doc)
     except Exception:
-        logging.warning("mongo unavailable for training save; using local fallback")
+        logging.exception("mongo unavailable for training save; using local fallback")
         _append_local_collection("training", doc)
     return entry
 
@@ -1645,6 +1653,12 @@ async def training_list(limit: int = 100):
     except Exception:
         logging.warning("mongo unavailable for training list; using local fallback")
         docs = _local_collection("training", limit=limit)
+    local_docs = _local_collection("training", limit=limit)
+    seen = {doc.get("id") for doc in docs if doc.get("id")}
+    for doc in local_docs:
+        if doc.get("id") not in seen:
+            docs.append(doc)
+    docs = sorted(docs, key=lambda x: x.get("timestamp", ""), reverse=True)[:limit]
     return {"entries": docs}
 
 @api_router.delete("/training/{entry_id}")
@@ -1858,6 +1872,7 @@ async def budget_v1(month: Optional[str] = None):
         "month": month,
         "income": DEFAULT_INCOME,
         "fixed_expenses": DEFAULT_FIXED_EXPENSES,
+        "fixed_active": {key: True for key in DEFAULT_FIXED_EXPENSES},
     }
     spending = [s for s in store["spending"] if (s.get("date") or "").startswith(month)]
     summary = _budget_summary(month, setup, store["spending"])
@@ -1877,6 +1892,10 @@ async def budget_v1_setup(req: BudgetSetup):
         "month": month,
         "income": _money_dict({**DEFAULT_INCOME, **req.income}),
         "fixed_expenses": _money_dict({**DEFAULT_FIXED_EXPENSES, **req.fixed_expenses}),
+        "fixed_active": {
+            key: bool(req.fixed_active.get(key, True))
+            for key in {**DEFAULT_FIXED_EXPENSES, **req.fixed_expenses}
+        },
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
     store["budget_setups"][month] = setup
@@ -1917,6 +1936,7 @@ async def budget_v1_checkin(req: SpendingCheckinCreate):
         "month": month,
         "income": DEFAULT_INCOME,
         "fixed_expenses": DEFAULT_FIXED_EXPENSES,
+        "fixed_active": {key: True for key in DEFAULT_FIXED_EXPENSES},
     }
     return {"ok": True, "summary": _budget_summary(month, setup, store["spending"])}
 

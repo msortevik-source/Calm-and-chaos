@@ -38,6 +38,8 @@ function BudgetV1() {
   const [setup, setSetup] = useState({ income: {}, fixed_expenses: {} });
   const [spend, setSpend] = useState({ date: todayIso(), category: "groceries" });
   const [busy, setBusy] = useState(false);
+  const [newIncome, setNewIncome] = useState("");
+  const [newExpense, setNewExpense] = useState("");
 
   const load = useCallback(async () => {
     const res = await getBudgetV1(month);
@@ -51,10 +53,35 @@ function BudgetV1() {
     setSetup((prev) => ({ ...prev, [group]: { ...prev[group], [key]: value } }));
   };
 
+  const setFixedActive = (key, checked) => {
+    setSetup((prev) => ({
+      ...prev,
+      fixed_active: { ...(prev.fixed_active || {}), [key]: checked },
+    }));
+  };
+
+  const addSetupKey = (group, name, clear) => {
+    const key = name.trim();
+    if (!key) return;
+    setSetup((prev) => {
+      const next = { ...prev, [group]: { ...(prev[group] || {}), [key]: 0 } };
+      if (group === "fixed_expenses") {
+        next.fixed_active = { ...(prev.fixed_active || {}), [key]: true };
+      }
+      return next;
+    });
+    clear("");
+  };
+
   const saveSetup = async () => {
     setBusy(true);
     try {
-      await saveBudgetSetup({ month, income: setup.income, fixed_expenses: setup.fixed_expenses });
+      await saveBudgetSetup({
+        month,
+        income: setup.income,
+        fixed_expenses: setup.fixed_expenses,
+        fixed_active: setup.fixed_active || {},
+      });
       await load();
       toast("Month saved. Future you gets a chair.");
     } finally {
@@ -88,6 +115,7 @@ function BudgetV1() {
   const summary = data?.summary || {};
   const incomeEntries = Object.entries(setup.income || {});
   const fixedEntries = Object.entries(setup.fixed_expenses || {});
+  const fixedActive = setup.fixed_active || summary.fixed_active || {};
   const resetWindow = "11th/12th-ish";
 
   return (
@@ -102,9 +130,22 @@ function BudgetV1() {
         <input data-testid="budget-month" type="month" value={month} onChange={(e) => setMonth(e.target.value)} className={inputCls + " w-44"} />
       </div>
 
+      <div className="warm-card rounded-2xl p-4" data-testid="monthly-snapshot">
+        <div className="text-xs uppercase tracking-[0.22em] text-moss-200/70 mb-2">monthly snapshot</div>
+        <div className="text-sm md:text-base text-moss-50 leading-relaxed">
+          Income: <span className="text-amber">{money(summary.income_total)}</span>
+          <span className="text-moss-200"> | </span>
+          Fixed: <span className="text-amber">{money(summary.fixed_total)}</span>
+          <span className="text-moss-200"> | </span>
+          Flexible logged: <span className="text-amber">{money(summary.flexible_total)}</span>
+          <span className="text-moss-200"> | </span>
+          Expected left: <span className="text-amber">{money(summary.left_after_logged_spending)}</span>
+        </div>
+      </div>
+
       <div className="grid md:grid-cols-4 gap-3">
         <Stat label="income" value={money(summary.income_total)} />
-        <Stat label="fixed" value={money(summary.fixed_total)} />
+        <Stat label="active fixed" value={money(summary.fixed_total)} />
         <Stat label="flexible logged" value={money(summary.flexible_total)} />
         <Stat label="expected left" value={money(summary.left_after_logged_spending)} />
       </div>
@@ -118,7 +159,7 @@ function BudgetV1() {
 
       <div className="grid lg:grid-cols-2 gap-5">
         <div className="warm-card rounded-3xl p-5">
-          <h3 className="font-heading text-xl text-moss-50 mb-4">Monthly setup</h3>
+          <h3 className="font-heading text-xl text-moss-50 mb-4">Monthly inputs</h3>
           <div className="grid md:grid-cols-2 gap-5">
             <div>
               <div className="text-xs uppercase tracking-[0.22em] text-moss-200/70 mb-3">income</div>
@@ -130,16 +171,25 @@ function BudgetV1() {
                   </label>
                 ))}
               </div>
+              <div className="flex gap-2 mt-3">
+                <input value={newIncome} onChange={(e) => setNewIncome(e.target.value)} placeholder="custom income source" className={inputCls + " flex-1"} />
+                <button type="button" onClick={() => addSetupKey("income", newIncome, setNewIncome)} className="pill-btn rounded-full px-3 py-2 text-xs">Add</button>
+              </div>
             </div>
             <div>
               <div className="text-xs uppercase tracking-[0.22em] text-moss-200/70 mb-3">fixed expenses</div>
               <div className="space-y-2 max-h-[340px] overflow-auto pr-1">
                 {fixedEntries.map(([key, value]) => (
-                  <label key={key} className="grid grid-cols-[1fr_110px] gap-2 items-center text-sm text-moss-100">
-                    <span>{key}</span>
+                  <label key={key} className="grid grid-cols-[auto_1fr_110px] gap-2 items-center text-sm text-moss-100">
+                    <input type="checkbox" checked={fixedActive[key] !== false} onChange={(e) => setFixedActive(key, e.target.checked)} />
+                    <span className={fixedActive[key] === false ? "text-moss-200/50 line-through" : ""}>{key}</span>
                     <input type="number" value={value || ""} onChange={(e) => setMoney("fixed_expenses", key, e.target.value)} className={inputCls} />
                   </label>
                 ))}
+              </div>
+              <div className="flex gap-2 mt-3">
+                <input value={newExpense} onChange={(e) => setNewExpense(e.target.value)} placeholder="custom recurring expense" className={inputCls + " flex-1"} />
+                <button type="button" onClick={() => addSetupKey("fixed_expenses", newExpense, setNewExpense)} className="pill-btn rounded-full px-3 py-2 text-xs">Add</button>
               </div>
             </div>
           </div>
