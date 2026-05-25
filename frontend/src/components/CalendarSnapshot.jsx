@@ -40,7 +40,7 @@ export default function CalendarSnapshot() {
       window.location.href = authorization_url;
     } catch (e) {
       toast("Calendar link did not start.", {
-        description: e?.response?.data?.detail || "Make sure the backend is running on port 8001.",
+        description: e?.response?.data?.detail || "Backend connection failed. The app should use the deployed Render API outside local dev.",
       });
     }
   };

@@ -20,6 +20,46 @@ const SESSION_OPTIONS = [
   { id: "friday", label: "Friday", sub: "Easy run + lower/upper" },
   { id: "long", label: "Long run", sub: "Saturday or Sunday" },
 ];
+const LOCAL_TEMPLATE = {
+  monday: {
+    focus: "Easy Run + Leg / Glute Day",
+    run: { label: "Easy run", distance: "3.4 km" },
+    exercises: [
+      { name: "Hip thrust", sets: 3, reps: 8 },
+      { name: "Kickback", sets: 3, reps: 8 },
+      { name: "Hip abduction", sets: 3, reps: 8 },
+      { name: "Romanian Deadlift (RDL)", sets: 3, reps: 8 },
+      { name: "Lateral raises", sets: 3, reps: 8 },
+    ],
+  },
+  wednesday: {
+    focus: "Intervals + Upper / Core",
+    run: { label: "4x4 intervals" },
+    exercises: [
+      { name: "Shoulder press", sets: 3, reps: 8 },
+      { name: "Triceps", sets: 3, reps: 8 },
+      { name: "Bicep curls", sets: 3, reps: 8 },
+      { name: "Hammer curls", sets: 3, reps: 8 },
+      { name: "Russian twist", sets: 3, reps: 10 },
+      { name: "Sit-ups", sets: 3, reps: 10 },
+    ],
+  },
+  friday: {
+    focus: "Easy Run + Lower / Upper Mix",
+    run: { label: "Easy run", distance: "3-4 km" },
+    exercises: [
+      { name: "Hip thrust", sets: 3, reps: 8 },
+      { name: "Leg press", sets: 3, reps: 8 },
+      { name: "Step-ups", sets: 3, reps: 8 },
+      { name: "Lateral raises", sets: 3, reps: 8 },
+      { name: "Lat pulldown", sets: 3, reps: 8 },
+      { name: "Hammer curls", sets: 3, reps: 8 },
+      { name: "Russian twist", sets: 3, reps: 10 },
+    ],
+  },
+  saturday: { focus: "Long Run", run: { label: "Long run" }, exercises: [] },
+  sunday: { focus: "Long Run", run: { label: "Long run" }, exercises: [] },
+};
 
 const todayIso = () => new Date().toISOString().slice(0, 10);
 const weekdayKey = () => new Date().toLocaleDateString("en-US", { weekday: "long" }).toLowerCase();
@@ -96,7 +136,7 @@ function ExerciseRow({ exercise, value, previous, onChange }) {
 
 export default function TrainingPage() {
   const workoutRef = useRef(null);
-  const [template, setTemplate] = useState({});
+  const [template, setTemplate] = useState(LOCAL_TEMPLATE);
   const [entries, setEntries] = useState([]);
   const [session, setSession] = useState(defaultSession());
   const [longRunDay, setLongRunDay] = useState(weekdayKey() === "sunday" ? "sunday" : "saturday");
@@ -120,11 +160,11 @@ export default function TrainingPage() {
   const load = async () => {
     try {
       const [t, e] = await Promise.all([getTemplate(), listTraining()]);
-      setTemplate(t.template || {});
+      setTemplate({ ...LOCAL_TEMPLATE, ...(t.template || {}) });
       setEntries(e.entries || []);
     } catch {
       const t = await getTemplate().catch(() => ({ template: {} }));
-      setTemplate(t.template || {});
+      setTemplate({ ...LOCAL_TEMPLATE, ...(t.template || {}) });
       setEntries([]);
     }
 
@@ -291,6 +331,7 @@ export default function TrainingPage() {
             >
               <div className="font-heading text-moss-50 text-sm">{option.label}</div>
               <div className="text-xs text-moss-200 mt-1 leading-snug">{option.sub}</div>
+              {session === option.id && <div className="text-[10px] uppercase tracking-[0.18em] text-amber mt-3">Logging below</div>}
             </button>
           ))}
         </div>

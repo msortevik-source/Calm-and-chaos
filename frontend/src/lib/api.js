@@ -1,6 +1,11 @@
 import axios from "axios";
 
-const BASE = process.env.REACT_APP_BACKEND_URL;
+const PROD_BACKEND = "https://calm-and-chaos-api.onrender.com";
+const LOCAL_BACKEND = "http://127.0.0.1:8001";
+const envBackend = process.env.REACT_APP_BACKEND_URL;
+const isLocalBrowser = ["localhost", "127.0.0.1"].includes(window.location.hostname);
+const envLooksLocal = envBackend && /localhost|127\.0\.0\.1/.test(envBackend);
+const BASE = ((envLooksLocal && !isLocalBrowser) ? PROD_BACKEND : (envBackend || (isLocalBrowser ? LOCAL_BACKEND : PROD_BACKEND))).replace(/\/$/, "");
 export const API = `${BASE}/api`;
 
 export const api = axios.create({ baseURL: API, timeout: 60000 });
