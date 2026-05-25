@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { CalendarDays, Link as LinkIcon, RefreshCw } from "lucide-react";
+import { toast } from "sonner";
 import { calendarStatus, calendarToday, calendarLoginUrl } from "../lib/api";
 
 function fmtTime(iso, all_day) {
@@ -7,8 +8,7 @@ function fmtTime(iso, all_day) {
   if (all_day) return "all day";
   try {
     const d = new Date(iso);
-    // Use the user's actual locale so Norway gets 14:00 not 2:00 PM
-    return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
   } catch { return ""; }
 }
 
@@ -26,14 +26,23 @@ export default function CalendarSnapshot() {
         const d = await calendarToday();
         setEvents(d.events || []);
       }
+    } catch {
+      setLinked(false);
+      setEvents([]);
     } finally { setLoading(false); }
   };
 
   useEffect(() => { load(); }, []);
 
   const connect = async () => {
-    const { authorization_url } = await calendarLoginUrl();
-    window.location.href = authorization_url;
+    try {
+      const { authorization_url } = await calendarLoginUrl();
+      window.location.href = authorization_url;
+    } catch (e) {
+      toast("Calendar link did not start.", {
+        description: e?.response?.data?.detail || "Make sure the backend is running on port 8001.",
+      });
+    }
   };
 
   return (
@@ -53,7 +62,7 @@ export default function CalendarSnapshot() {
       {!linked && (
         <div className="space-y-3">
           <p className="text-moss-200 font-body text-sm leading-relaxed">
-            Link Google Calendar to see what's actually on the docket. Optional. The room works without it.
+            Link Google Calendar to include schedule context in planning and summaries. Optional, but useful.
           </p>
           <button data-testid="calendar-connect" onClick={connect} className="pill-btn rounded-full px-4 py-1.5 text-xs inline-flex items-center gap-2">
             <LinkIcon size={13} /> Link calendar
@@ -76,12 +85,7 @@ export default function CalendarSnapshot() {
               </div>
               <div className="flex-1 min-w-0">
                 <div className="text-moss-50 text-sm leading-snug truncate">{ev.summary}</div>
-                <div className="text-moss-200 text-xs truncate flex gap-2">
-                  {ev.location && <span>{ev.location}</span>}
-                  {ev.calendar && !ev.calendar_primary && (
-                    <span className="text-moss-200/60 italic">· {ev.calendar}</span>
-                  )}
-                </div>
+                {ev.location && <div className="text-moss-200 text-xs truncate">{ev.location}</div>}
               </div>
             </li>
           ))}

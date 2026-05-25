@@ -1,10 +1,9 @@
 import { NavLink, Outlet } from "react-router-dom";
-import { Home, MessageCircle, Notebook, Activity, Sparkles, Wallet, Mail } from "lucide-react";
+import { Home, BarChart3, Activity, Sparkles, Wallet, Mail } from "lucide-react";
 
 const links = [
   { to: "/", label: "Home", icon: Home, testid: "nav-home" },
-  { to: "/conversation", label: "Conversation", icon: MessageCircle, testid: "nav-conversation" },
-  { to: "/braindump", label: "Brain dump", icon: Notebook, testid: "nav-braindump" },
+  { to: "/conversation", label: "Analysis Corner", icon: BarChart3, testid: "nav-conversation" },
   { to: "/training", label: "Training", icon: Activity, testid: "nav-training" },
   { to: "/budget", label: "Budget & food", icon: Wallet, testid: "nav-budget" },
   { to: "/letter", label: "Letter", icon: Mail, testid: "nav-letter" },
@@ -18,7 +17,7 @@ export default function Shell() {
         <aside className="hidden md:flex flex-col w-64 px-8 py-10 border-r border-moss-700/70 sticky top-0 h-screen" data-testid="sidebar">
           <div className="mb-12">
             <div className="font-heading text-2xl text-moss-50 leading-tight">Calm <span className="text-amber">&</span> Chaos</div>
-            <div className="text-xs text-moss-200 mt-1 tracking-wide">the familiar room</div>
+            <div className="text-xs text-moss-200 mt-1 tracking-wide">observant analyst with receipts</div>
           </div>
           <nav className="flex flex-col gap-5">
             {links.map(l => (
@@ -37,8 +36,8 @@ export default function Shell() {
             ))}
           </nav>
           <div className="mt-auto pt-8 text-xs text-moss-200/80 leading-relaxed">
-            <p className="italic">"I know your nonsense.</p>
-            <p className="italic">You're home."</p>
+            <p className="italic">Patterns over motivation.</p>
+            <p className="italic">Receipts over shame.</p>
           </div>
         </aside>
 

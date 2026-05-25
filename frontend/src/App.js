@@ -4,7 +4,6 @@ import { Toaster } from "sonner";
 import Shell from "./components/Shell";
 import HomePage from "./pages/HomePage";
 import ConversationPage from "./pages/ConversationPage";
-import BrainDumpPage from "./pages/BrainDumpPage";
 import TrainingPage from "./pages/TrainingPage";
 import BudgetFoodPage from "./pages/BudgetFoodPage";
 import PatternsPage from "./pages/PatternsPage";
@@ -18,7 +17,6 @@ function App() {
           <Route element={<Shell />}>
             <Route path="/" element={<HomePage />} />
             <Route path="/conversation" element={<ConversationPage />} />
-            <Route path="/braindump" element={<BrainDumpPage />} />
             <Route path="/training" element={<TrainingPage />} />
             <Route path="/budget" element={<BudgetFoodPage />} />
             <Route path="/patterns" element={<PatternsPage />} />
