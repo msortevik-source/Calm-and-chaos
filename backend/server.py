@@ -1629,9 +1629,13 @@ async def strava_status():
     }
 
 @api_router.get("/oauth/strava/login")
-async def strava_login():
+async def strava_login(redirect: bool = False):
     if not _strava_configured():
+        if redirect:
+            return RedirectResponse(f"{FRONTEND_URL}/training?strava=error")
         raise HTTPException(status_code=500, detail="Strava is not configured")
+    if redirect:
+        return RedirectResponse(_strava_authorize_url())
     return {"url": _strava_authorize_url()}
 
 @api_router.get("/oauth/strava/callback")

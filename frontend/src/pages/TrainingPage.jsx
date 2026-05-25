@@ -5,9 +5,9 @@ import {
   createTraining,
   deleteTraining,
   stravaImport,
-  stravaLoginUrl,
   stravaStatus,
   stravaUnlink,
+  API,
 } from "../lib/api";
 import DiscussButton from "../components/DiscussButton";
 import { Activity, Dumbbell, Footprints, Link2, RefreshCw, Save, Trash2, Unlink } from "lucide-react";
@@ -273,13 +273,7 @@ export default function TrainingPage() {
 
   const linkStrava = async () => {
     setStravaBusy(true);
-    try {
-      const res = await stravaLoginUrl();
-      window.location.href = res.url;
-    } catch {
-      toast("Couldn't start Strava link.");
-      setStravaBusy(false);
-    }
+    window.location.href = `${API}/oauth/strava/login?redirect=true`;
   };
 
   const importStrava = async () => {
