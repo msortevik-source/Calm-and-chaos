@@ -76,11 +76,15 @@ function sessionDay(session, longRunDay) {
 }
 
 function lastForExercise(entries, exerciseName) {
-  return entries.find((entry) => (
-    entry.kind === "strength" &&
-    (entry.exercise || "").toLowerCase() === exerciseName.toLowerCase() &&
-    (entry.weight_kg || entry.reps)
-  ));
+  for (const entry of entries) {
+    if (entry.kind !== "strength") continue;
+    if (Array.isArray(entry.exercises)) {
+      const found = entry.exercises.find((item) => (item.exercise || item.name || "").toLowerCase() === exerciseName.toLowerCase());
+      if (found?.weight_kg || found?.reps) return found;
+    }
+    if ((entry.exercise || "").toLowerCase() === exerciseName.toLowerCase() && (entry.weight_kg || entry.reps)) return entry;
+  }
+  return null;
 }
 
 function lastRun(entries, label) {
@@ -264,20 +268,31 @@ export default function TrainingPage() {
         }));
       }
 
+      const strengthExercises = [];
       exercises.forEach((exercise) => {
         const value = exerciseLog[exercise.name] || {};
         if (!value.weight_kg && !value.reps && !value.notes) return;
-        tasks.push(createTraining({
-          kind: "strength",
-          date,
-          session_name: workout.focus,
+        strengthExercises.push({
           exercise: exercise.name,
           sets: exercise.sets,
           reps: value.reps ? Number(value.reps) : exercise.reps,
           weight_kg: value.weight_kg ? Number(value.weight_kg) : null,
           notes: value.notes || "",
-        }));
+        });
       });
+
+      if (strengthExercises.length) {
+        tasks.push(createTraining({
+          kind: "strength",
+          date,
+          session_name: workout.focus,
+          exercises: strengthExercises,
+          notes: strengthExercises
+            .filter((item) => item.notes)
+            .map((item) => `${item.exercise}: ${item.notes}`)
+            .join("\n"),
+        }));
+      }
 
       if (!tasks.length) {
         toast("Nothing to save. The workout is prepared, not psychic.");
@@ -474,10 +489,21 @@ export default function TrainingPage() {
                 )}
                 {entry.kind === "strength" && (
                   <span className="text-moss-200 font-normal ml-2">
-                    {entry.exercise || ""}{entry.weight_kg ? ` - ${entry.weight_kg}kg` : ""}{entry.sets && entry.reps ? ` - ${entry.sets}x${entry.reps}` : ""}
+                    {Array.isArray(entry.exercises)
+                      ? `${entry.exercises.length} exercises`
+                      : `${entry.exercise || ""}${entry.weight_kg ? ` - ${entry.weight_kg}kg` : ""}${entry.sets && entry.reps ? ` - ${entry.sets}x${entry.reps}` : ""}`}
                   </span>
                 )}
               </div>
+              {Array.isArray(entry.exercises) && entry.exercises.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {entry.exercises.map((item) => (
+                    <span key={item.exercise} className="rounded-full border border-moss-700 bg-moss-800/50 px-3 py-1 text-xs text-moss-100">
+                      {item.exercise}: {item.weight_kg || "-"}kg x {item.reps || "-"}
+                    </span>
+                  ))}
+                </div>
+              )}
               {entry.notes && <p className="text-moss-200 text-sm mt-1">{entry.notes}</p>}
             </div>
             <div className="flex flex-col gap-2 items-center shrink-0">

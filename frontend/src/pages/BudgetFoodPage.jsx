@@ -169,15 +169,15 @@ function BudgetV1() {
         <div className="font-heading text-xl text-moss-50">{summary.checked_days || 0}/{summary.days_in_month || 30} days checked in</div>
       </div>
 
-      <div className="grid lg:grid-cols-2 gap-5">
+      <div className="grid xl:grid-cols-[minmax(0,1.65fr)_minmax(320px,0.85fr)] gap-5 items-start">
         <div className="warm-card rounded-3xl p-5">
           <h3 className="font-heading text-xl text-moss-50 mb-4">Monthly inputs</h3>
-          <div className="grid md:grid-cols-2 gap-5">
+          <div className="grid xl:grid-cols-2 gap-5">
             <div>
               <div className="text-xs uppercase tracking-[0.22em] text-moss-200/70 mb-3">income</div>
               <div className="space-y-2">
                 {incomeEntries.map(([key, value]) => (
-                  <label key={key} className="grid grid-cols-[1fr_110px] md:grid-cols-[1fr_110px_150px] gap-2 items-center text-sm text-moss-100">
+                  <label key={key} className="grid grid-cols-1 sm:grid-cols-[1fr_110px] 2xl:grid-cols-[1fr_110px_150px] gap-2 items-center text-sm text-moss-100">
                     <span>{key}</span>
                     <input type="number" value={value || ""} onChange={(e) => setMoney("income", key, e.target.value)} className={inputCls} />
                     <input value={incomeNotes[key] || ""} onChange={(e) => setNote("income_notes", key, e.target.value)} placeholder="note" className={inputCls} />
@@ -193,7 +193,7 @@ function BudgetV1() {
               <div className="text-xs uppercase tracking-[0.22em] text-moss-200/70 mb-3">fixed expenses</div>
               <div className="space-y-2 max-h-[340px] overflow-auto pr-1">
                 {fixedEntries.map(([key, value]) => (
-                  <label key={key} className="grid grid-cols-[auto_1fr_110px] md:grid-cols-[auto_1fr_110px_150px] gap-2 items-center text-sm text-moss-100">
+                  <label key={key} className="grid grid-cols-[auto_1fr] sm:grid-cols-[auto_1fr_110px] 2xl:grid-cols-[auto_1fr_110px_150px] gap-2 items-center text-sm text-moss-100">
                     <input type="checkbox" checked={fixedActive[key] !== false} onChange={(e) => setFixedActive(key, e.target.checked)} />
                     <span className={fixedActive[key] === false ? "text-moss-200/50 line-through" : ""}>{key}</span>
                     <input type="number" value={value || ""} onChange={(e) => setMoney("fixed_expenses", key, e.target.value)} className={inputCls} />
@@ -212,12 +212,12 @@ function BudgetV1() {
           </button>
         </div>
 
-        <div className="warm-card rounded-3xl p-5">
+        <div className="warm-card rounded-3xl p-4 xl:max-w-[380px] xl:justify-self-end w-full">
           <div className="flex items-center gap-2 mb-4">
             <ListChecks size={15} className="text-amber" />
             <h3 className="font-heading text-xl text-moss-50">Any spending today?</h3>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-2">
             <input data-testid="spending-amount" type="number" step="0.01" placeholder="amount in kr" value={spend.amount || ""} onChange={(e) => setSpend((p) => ({ ...p, amount: e.target.value }))} className={inputCls} />
             <select data-testid="spending-category" value={spend.category} onChange={(e) => setSpend((p) => ({ ...p, category: e.target.value }))} className={inputCls}>
               {(data?.categories || []).map((cat) => <option key={cat} value={cat}>{cat}</option>)}
@@ -226,10 +226,10 @@ function BudgetV1() {
             <input data-testid="spending-note" placeholder="note, if useful" value={spend.note || ""} onChange={(e) => setSpend((p) => ({ ...p, note: e.target.value }))} className={inputCls} />
           </div>
           <div className="flex flex-wrap gap-2 mt-4">
-            <button data-testid="spending-save" disabled={busy} onClick={addSpending} className="pill-btn primary rounded-full px-5 py-2 text-xs inline-flex items-center gap-2">
+            <button data-testid="spending-save" disabled={busy} onClick={addSpending} className="pill-btn primary rounded-full px-4 py-2 text-xs inline-flex items-center gap-2">
               <Plus size={13} /> Log it
             </button>
-            <button data-testid="spending-checkin" disabled={busy} onClick={checkInNoSpend} className="pill-btn rounded-full px-5 py-2 text-xs inline-flex items-center gap-2">
+            <button data-testid="spending-checkin" disabled={busy} onClick={checkInNoSpend} className="pill-btn rounded-full px-4 py-2 text-xs inline-flex items-center gap-2">
               <Check size={13} /> Nothing spent
             </button>
           </div>

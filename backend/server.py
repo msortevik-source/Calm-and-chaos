@@ -118,6 +118,7 @@ class TrainingCreate(BaseModel):
     weight_kg: Optional[float] = None
     reps: Optional[int] = None
     sets: Optional[int] = None
+    exercises: Optional[List[Dict[str, Any]]] = None
     # shared / mood
     notes: Optional[str] = None
     soreness_notes: Optional[str] = None
