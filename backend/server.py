@@ -182,6 +182,28 @@ class SpendingEntry(SpendingCreate):
 class SpendingCheckinCreate(BaseModel):
     date: Optional[str] = None
 
+class LifeUpgradeCreate(BaseModel):
+    title: str
+    category: str = "Someday"
+    note: Optional[str] = None
+    estimated_cost: Optional[float] = None
+    priority: Optional[str] = None
+
+class LifeUpgradeUpdate(BaseModel):
+    title: Optional[str] = None
+    category: Optional[str] = None
+    note: Optional[str] = None
+    estimated_cost: Optional[float] = None
+    priority: Optional[str] = None
+    completed: Optional[bool] = None
+
+class LifeUpgradeItem(LifeUpgradeCreate):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    created_date: str = Field(default_factory=lambda: datetime.now(timezone.utc).date().isoformat())
+    completed: bool = False
+    completed_date: Optional[str] = None
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
 class FoodPlanCreate(BaseModel):
     week_start: Optional[str] = None
     breakfast_default: str = "yoghurt, oats, kesam, fruit, protein shake"
@@ -262,6 +284,9 @@ SPENDING_CATEGORIES = [
     "other",
 ]
 
+LIFE_UPGRADE_CATEGORIES = ["Home", "Maintenance", "Purchases", "Outdoor", "Storage", "Someday"]
+LIFE_UPGRADE_PRIORITIES = ["low", "medium", "high"]
+
 DINNER_TEMPLATES = {
     "chicken week": ["chicken tacos", "chicken rice bowls", "chicken pasta", "chicken soup", "sheet-pan chicken"],
     "minced meat week": ["taco bowls", "meat sauce pasta", "burger bowls", "chili", "meatball wraps"],
@@ -290,21 +315,22 @@ def _days_in_month(month: str) -> int:
 
 def _read_life_store() -> Dict[str, Any]:
     if not LOCAL_LIFE_FILE.exists():
-        return {"budget_setups": {}, "spending": [], "spending_checkins": [], "food_plans": {}, "braindumps": [], "training": []}
+        return {"budget_setups": {}, "spending": [], "spending_checkins": [], "food_plans": {}, "braindumps": [], "training": [], "life_upgrades": []}
     try:
         data = json.loads(LOCAL_LIFE_FILE.read_text(encoding="utf-8"))
         if not isinstance(data, dict):
-            return {"budget_setups": {}, "spending": [], "spending_checkins": [], "food_plans": {}, "braindumps": [], "training": []}
+            return {"budget_setups": {}, "spending": [], "spending_checkins": [], "food_plans": {}, "braindumps": [], "training": [], "life_upgrades": []}
         data.setdefault("budget_setups", {})
         data.setdefault("spending", [])
         data.setdefault("spending_checkins", [])
         data.setdefault("food_plans", {})
         data.setdefault("braindumps", [])
         data.setdefault("training", [])
+        data.setdefault("life_upgrades", [])
         return data
     except Exception:
         logging.exception("failed reading life planning store")
-        return {"budget_setups": {}, "spending": [], "spending_checkins": [], "food_plans": {}, "braindumps": [], "training": []}
+        return {"budget_setups": {}, "spending": [], "spending_checkins": [], "food_plans": {}, "braindumps": [], "training": [], "life_upgrades": []}
 
 def _write_life_store(data: Dict[str, Any]):
     LOCAL_LIFE_FILE.write_text(json.dumps(data, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
@@ -1967,6 +1993,63 @@ async def budget_v1_spending_delete(entry_id: str):
     store["spending"] = [s for s in store["spending"] if s.get("id") != entry_id]
     _write_life_store(store)
     return {"ok": True}
+
+# Life Upgrades / Future Me Board
+@api_router.get("/life-upgrades")
+async def life_upgrades_list():
+    store = _read_life_store()
+    items = sorted(store.get("life_upgrades", []), key=lambda x: x.get("timestamp", ""), reverse=True)
+    return {
+        "items": items,
+        "categories": LIFE_UPGRADE_CATEGORIES,
+        "priorities": LIFE_UPGRADE_PRIORITIES,
+    }
+
+@api_router.post("/life-upgrades", response_model=LifeUpgradeItem)
+async def life_upgrades_create(req: LifeUpgradeCreate):
+    title = req.title.strip()
+    if not title:
+        raise HTTPException(status_code=400, detail="title required")
+    category = req.category if req.category in LIFE_UPGRADE_CATEGORIES else "Someday"
+    item = LifeUpgradeItem(**{**req.model_dump(), "title": title, "category": category})
+    doc = item.model_dump()
+    doc["timestamp"] = doc["timestamp"].isoformat()
+    store = _read_life_store()
+    store.setdefault("life_upgrades", [])
+    store["life_upgrades"].append(doc)
+    _write_life_store(store)
+    return item
+
+@api_router.patch("/life-upgrades/{item_id}")
+async def life_upgrades_update(item_id: str, req: LifeUpgradeUpdate):
+    store = _read_life_store()
+    items = store.setdefault("life_upgrades", [])
+    for item in items:
+        if item.get("id") != item_id:
+            continue
+        updates = req.model_dump(exclude_unset=True)
+        if "title" in updates:
+            updates["title"] = (updates.get("title") or "").strip()
+            if not updates["title"]:
+                raise HTTPException(status_code=400, detail="title required")
+        if "category" in updates and updates["category"] not in LIFE_UPGRADE_CATEGORIES:
+            updates["category"] = "Someday"
+        if "completed" in updates:
+            completed = bool(updates["completed"])
+            updates["completed"] = completed
+            updates["completed_date"] = datetime.now(timezone.utc).date().isoformat() if completed else None
+        item.update(updates)
+        _write_life_store(store)
+        return {"item": item}
+    raise HTTPException(status_code=404, detail="life upgrade not found")
+
+@api_router.delete("/life-upgrades/{item_id}")
+async def life_upgrades_delete(item_id: str):
+    store = _read_life_store()
+    before = len(store.get("life_upgrades", []))
+    store["life_upgrades"] = [item for item in store.get("life_upgrades", []) if item.get("id") != item_id]
+    _write_life_store(store)
+    return {"ok": True, "deleted": before - len(store["life_upgrades"])}
 
 # Meals
 @api_router.post("/meal", response_model=MealEntry)

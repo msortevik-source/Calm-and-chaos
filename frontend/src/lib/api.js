@@ -39,6 +39,11 @@ export const createSpending = (payload) => api.post("/budget/v1/spending", paylo
 export const markSpendingCheckin = (payload) => api.post("/budget/v1/checkin", payload).then(r => r.data);
 export const deleteSpending = (id) => api.delete(`/budget/v1/spending/${id}`).then(r => r.data);
 
+export const listLifeUpgrades = () => api.get("/life-upgrades").then(r => r.data);
+export const createLifeUpgrade = (payload) => api.post("/life-upgrades", payload).then(r => r.data);
+export const updateLifeUpgrade = (id, payload) => api.patch(`/life-upgrades/${id}`, payload).then(r => r.data);
+export const deleteLifeUpgrade = (id) => api.delete(`/life-upgrades/${id}`).then(r => r.data);
+
 export const listMeals = () => api.get("/meal").then(r => r.data);
 export const createMeal = (payload) => api.post("/meal", payload).then(r => r.data);
 export const deleteMeal = (id) => api.delete(`/meal/${id}`).then(r => r.data);

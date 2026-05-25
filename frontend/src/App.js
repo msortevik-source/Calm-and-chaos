@@ -8,6 +8,7 @@ import TrainingPage from "./pages/TrainingPage";
 import BudgetFoodPage from "./pages/BudgetFoodPage";
 import PatternsPage from "./pages/PatternsPage";
 import LetterPage from "./pages/LetterPage";
+import LifeUpgradesPage from "./pages/LifeUpgradesPage";
 
 function App() {
   return (
@@ -19,6 +20,7 @@ function App() {
             <Route path="/conversation" element={<ConversationPage />} />
             <Route path="/training" element={<TrainingPage />} />
             <Route path="/budget" element={<BudgetFoodPage />} />
+            <Route path="/life-upgrades" element={<LifeUpgradesPage />} />
             <Route path="/patterns" element={<PatternsPage />} />
             <Route path="/letter" element={<LetterPage />} />
           </Route>
