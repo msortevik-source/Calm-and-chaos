@@ -26,7 +26,7 @@ export const createTraining = (payload) => api.post("/training", payload).then(r
 export const deleteTraining = (id) => api.delete(`/training/${id}`).then(r => r.data);
 export const stravaStatus = () => api.get("/strava/status").then(r => r.data);
 export const stravaLoginUrl = () => api.get("/oauth/strava/login").then(r => r.data);
-export const stravaImport = (payload = {}) => api.post("/strava/import", payload).then(r => r.data);
+export const stravaImport = (payload = {}) => api.get(`/strava/import/recent?limit=${payload.limit || 10}`).then(r => r.data);
 export const stravaUnlink = () => api.post("/strava/unlink").then(r => r.data);
 
 export const listBudget = () => api.get("/budget").then(r => r.data);

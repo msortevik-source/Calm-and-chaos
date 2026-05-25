@@ -1750,19 +1750,18 @@ async def strava_activities(limit: int = 10):
         raise HTTPException(status_code=502, detail=f"Strava refused to cooperate: {exc}")
     return {"activities": activities}
 
-@api_router.post("/strava/import")
-async def strava_import(req: StravaImportRequest):
+async def _strava_import_recent(limit: int = 10, types: Optional[List[str]] = None):
     if not _strava_configured():
         raise HTTPException(status_code=500, detail="Strava is not configured")
     try:
-        activities = await _strava_fetch_activities(req.limit)
+        activities = await _strava_fetch_activities(limit)
     except HTTPException:
         raise
     except Exception as exc:
         logging.exception("Strava import failed")
         raise HTTPException(status_code=502, detail=f"Strava refused to cooperate: {exc}")
 
-    allowed_types = {t.lower() for t in (req.types or ["run", "trailrun", "virtualrun", "ride", "walk"])}
+    allowed_types = {t.lower() for t in (types or ["run", "trailrun", "virtualrun", "ride", "walk"])}
     try:
         existing_docs = await db.training.find({"strava_id": {"$exists": True}}, {"_id": 0, "strava_id": 1}).to_list(1000)
     except Exception:
@@ -1797,6 +1796,14 @@ async def strava_import(req: StravaImportRequest):
     store["training"] = store["training"][-500:]
     _write_life_store(store)
     return {"imported": imported, "imported_count": len(imported), "skipped_count": skipped}
+
+@api_router.get("/strava/import/recent")
+async def strava_import_recent(limit: int = 10):
+    return await _strava_import_recent(limit=limit)
+
+@api_router.post("/strava/import")
+async def strava_import(req: StravaImportRequest):
+    return await _strava_import_recent(limit=req.limit, types=req.types)
 
 # Budget
 @api_router.post("/budget", response_model=BudgetEntry)
@@ -2227,8 +2234,10 @@ async def calendar_status():
     return {"linked": bool(doc and doc.get("refresh_token")), "email": (doc or {}).get("email")}
 
 @api_router.get("/oauth/calendar/login")
-async def oauth_login():
+async def oauth_login(redirect: bool = False):
     if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
+        if redirect:
+            return RedirectResponse(f"{FRONTEND_URL}/?calendar=error&reason=google_credentials_missing")
         raise HTTPException(status_code=500, detail="Google credentials not configured")
     # Build the auth URL manually to avoid PKCE (our client is confidential).
     from urllib.parse import urlencode
@@ -2246,10 +2255,16 @@ async def oauth_login():
         "include_granted_scopes": "true",
     }
     url = "https://accounts.google.com/o/oauth2/v2/auth?" + urlencode(params)
+    if redirect:
+        return RedirectResponse(url)
     return {"authorization_url": url}
 
 @api_router.get("/oauth/calendar/callback")
-async def oauth_callback(code: str):
+async def oauth_callback(code: Optional[str] = None, error: Optional[str] = None):
+    if error:
+        return RedirectResponse(f"{FRONTEND_URL}/?calendar=error&reason={error}")
+    if not code:
+        return RedirectResponse(f"{FRONTEND_URL}/?calendar=error&reason=missing_code")
     token_resp = _http.post(
         "https://oauth2.googleapis.com/token",
         data={
@@ -2262,7 +2277,8 @@ async def oauth_callback(code: str):
         timeout=20,
     ).json()
     if "access_token" not in token_resp:
-        raise HTTPException(status_code=400, detail=f"oauth failed: {token_resp}")
+        logging.warning("calendar oauth failed: %s", token_resp)
+        return RedirectResponse(f"{FRONTEND_URL}/?calendar=error&reason=token_exchange_failed")
 
     user_info = _http.get(
         "https://www.googleapis.com/oauth2/v2/userinfo",

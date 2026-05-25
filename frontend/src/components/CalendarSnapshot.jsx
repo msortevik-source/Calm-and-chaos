@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { CalendarDays, Link as LinkIcon, RefreshCw } from "lucide-react";
-import { toast } from "sonner";
-import { calendarStatus, calendarToday, calendarLoginUrl } from "../lib/api";
+import { calendarStatus, calendarToday, API } from "../lib/api";
 
 function fmtTime(iso, all_day) {
   if (!iso) return "";
@@ -34,15 +33,8 @@ export default function CalendarSnapshot() {
 
   useEffect(() => { load(); }, []);
 
-  const connect = async () => {
-    try {
-      const { authorization_url } = await calendarLoginUrl();
-      window.location.href = authorization_url;
-    } catch (e) {
-      toast("Calendar link did not start.", {
-        description: e?.response?.data?.detail || "Backend connection failed. The app should use the deployed Render API outside local dev.",
-      });
-    }
+  const connect = () => {
+    window.location.href = `${API}/oauth/calendar/login?redirect=true`;
   };
 
   return (
