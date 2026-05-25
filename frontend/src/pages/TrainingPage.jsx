@@ -135,6 +135,7 @@ function ExerciseRow({ exercise, value, previous, onChange }) {
 
 export default function TrainingPage() {
   const workoutRef = useRef(null);
+  const entriesRef = useRef(null);
   const [template, setTemplate] = useState(LOCAL_TEMPLATE);
   const [entries, setEntries] = useState([]);
   const [session, setSession] = useState(defaultSession());
@@ -169,7 +170,7 @@ export default function TrainingPage() {
     }
 
     const s = await stravaStatus().catch(() => null);
-    if (s) setStrava(s);
+    if (s) setStrava((prev) => ({ ...s, linked: Boolean(s.linked || prev.linked) }));
   };
 
   useEffect(() => {
@@ -187,10 +188,14 @@ export default function TrainingPage() {
     if (params.get("strava_import") === "done") {
       const imported = params.get("imported") || "0";
       const skipped = params.get("skipped") || "0";
+      setStrava((prev) => ({ ...prev, configured: true, linked: true }));
       setStravaImportNote(`Imported ${imported}. Skipped ${skipped}.`);
       toast(`Imported ${imported} from Strava.`, {
         description: Number(imported) ? "Training log updated." : "Nothing new. Suspiciously calm.",
       });
+      window.setTimeout(() => {
+        entriesRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 250);
       cleanUrl = true;
     }
     if (params.get("strava_import") === "error") {
@@ -312,6 +317,7 @@ export default function TrainingPage() {
     setStravaBusy(true);
     try {
       await stravaUnlink();
+      setStrava((prev) => ({ ...prev, linked: false, athlete: null }));
       await load();
       toast("Strava unlinked.");
     } catch {
@@ -440,7 +446,19 @@ export default function TrainingPage() {
         </div>
       </div>
 
-      <div className="space-y-3" data-testid="training-entries">
+      <div ref={entriesRef} className="space-y-3 scroll-mt-32" data-testid="training-entries">
+        <div className="flex items-end justify-between gap-3">
+          <div>
+            <div className="text-xs uppercase tracking-[0.25em] text-moss-200/70 mb-2">Receipts</div>
+            <h2 className="font-heading text-3xl text-moss-50">Training log</h2>
+          </div>
+          <div className="text-xs text-moss-200">{entries.length} saved</div>
+        </div>
+        {entries.length === 0 && (
+          <div className="warm-card rounded-2xl p-4 text-sm text-moss-200">
+            No training entries visible yet.
+          </div>
+        )}
         {entries.slice(0, 16).map((entry) => (
           <div key={entry.id} className="warm-card rounded-2xl p-4 flex items-start gap-4">
             <div className="text-amber font-heading text-sm w-20 shrink-0">{entry.date || "-"}</div>

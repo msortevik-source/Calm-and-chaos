@@ -2240,14 +2240,34 @@ async def _calendar_token_delete():
     if LOCAL_TOKEN_FILE.exists():
         LOCAL_TOKEN_FILE.unlink()
 
+async def _record_calendar_debug(event: str, detail: Optional[Dict[str, Any]] = None):
+    doc = {
+        "provider": "google_calendar",
+        "event": event,
+        "detail": detail or {},
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+    try:
+        await db.oauth_debug.insert_one(doc)
+    except Exception:
+        logging.warning("mongo unavailable for calendar debug write")
+
 @api_router.get("/calendar/status")
 async def calendar_status():
     doc = await _calendar_token_get()
-    return {"linked": bool(doc and doc.get("refresh_token")), "email": (doc or {}).get("email")}
+    return {"linked": bool(doc and (doc.get("refresh_token") or doc.get("access_token"))), "email": (doc or {}).get("email")}
 
 @api_router.get("/calendar/debug")
 async def calendar_debug():
     doc = await _calendar_token_get()
+    events = []
+    try:
+        events = await db.oauth_debug.find(
+            {"provider": "google_calendar"},
+            {"_id": 0},
+        ).sort("timestamp", -1).to_list(10)
+    except Exception:
+        logging.warning("mongo unavailable for calendar debug read")
     return {
         "configured": bool(GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET),
         "client_id_present": bool(GOOGLE_CLIENT_ID),
@@ -2255,15 +2275,17 @@ async def calendar_debug():
         "app_public_url": APP_PUBLIC_URL,
         "frontend_url": FRONTEND_URL,
         "redirect_uri": REDIRECT_URI,
-        "linked": bool(doc and doc.get("refresh_token")),
+        "linked": bool(doc and (doc.get("refresh_token") or doc.get("access_token"))),
         "email": (doc or {}).get("email"),
         "has_access_token": bool((doc or {}).get("access_token")),
         "has_refresh_token": bool((doc or {}).get("refresh_token")),
+        "recent_events": events,
     }
 
 @api_router.get("/oauth/calendar/login")
 async def oauth_login(redirect: bool = False):
     if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
+        await _record_calendar_debug("login_not_configured")
         if redirect:
             return RedirectResponse(f"{FRONTEND_URL}/?calendar=error&reason=google_credentials_missing")
         raise HTTPException(status_code=500, detail="Google credentials not configured")
@@ -2283,6 +2305,7 @@ async def oauth_login(redirect: bool = False):
         "include_granted_scopes": "true",
     }
     url = "https://accounts.google.com/o/oauth2/v2/auth?" + urlencode(params)
+    await _record_calendar_debug("login_started", {"redirect": redirect, "redirect_uri": REDIRECT_URI})
     if redirect:
         return RedirectResponse(url)
     return {"authorization_url": url}
@@ -2290,9 +2313,12 @@ async def oauth_login(redirect: bool = False):
 @api_router.get("/oauth/calendar/callback")
 async def oauth_callback(code: Optional[str] = None, error: Optional[str] = None):
     if error:
+        await _record_calendar_debug("callback_error", {"error": error})
         return RedirectResponse(f"{FRONTEND_URL}/?calendar=error&reason={error}")
     if not code:
+        await _record_calendar_debug("callback_missing_code")
         return RedirectResponse(f"{FRONTEND_URL}/?calendar=error&reason=missing_code")
+    await _record_calendar_debug("callback_code_received")
     token_resp = _http.post(
         "https://oauth2.googleapis.com/token",
         data={
@@ -2306,6 +2332,10 @@ async def oauth_callback(code: Optional[str] = None, error: Optional[str] = None
     ).json()
     if "access_token" not in token_resp:
         logging.warning("calendar oauth failed: %s", token_resp)
+        await _record_calendar_debug("token_exchange_failed", {
+            "error": token_resp.get("error"),
+            "error_description": token_resp.get("error_description"),
+        })
         return RedirectResponse(f"{FRONTEND_URL}/?calendar=error&reason=token_exchange_failed")
 
     user_info = _http.get(
@@ -2324,6 +2354,12 @@ async def oauth_callback(code: Optional[str] = None, error: Optional[str] = None
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
     await _calendar_token_save(save)
+    saved = await _calendar_token_get()
+    await _record_calendar_debug("token_saved", {
+        "email": email,
+        "has_access_token": bool((saved or {}).get("access_token")),
+        "has_refresh_token": bool((saved or {}).get("refresh_token")),
+    })
     return RedirectResponse(f"{FRONTEND_URL}/?calendar=linked")
 
 @api_router.post("/calendar/unlink")
