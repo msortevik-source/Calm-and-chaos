@@ -3,6 +3,7 @@ from fastapi.responses import RedirectResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
+import certifi
 import os
 import logging
 import uuid
@@ -42,7 +43,17 @@ ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
 mongo_url = os.environ['MONGO_URL']
-client = AsyncIOMotorClient(mongo_url, serverSelectionTimeoutMS=2000)
+mongo_kwargs = {
+    "serverSelectionTimeoutMS": 20000,
+    "connectTimeoutMS": 20000,
+    "socketTimeoutMS": 20000,
+}
+if "mongodb+srv://" in mongo_url or "mongodb.net" in mongo_url:
+    mongo_kwargs.update({
+        "tls": True,
+        "tlsCAFile": certifi.where(),
+    })
+client = AsyncIOMotorClient(mongo_url, **mongo_kwargs)
 db = client[os.environ['DB_NAME']]
 
 OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY')
