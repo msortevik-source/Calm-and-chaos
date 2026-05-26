@@ -107,6 +107,9 @@ function BudgetV1() {
       await createSpending({ ...spend, amount: Number(spend.amount) });
       setSpend({ date: todayIso(), category: spend.category });
       await load();
+      toast("Logged. It should show up everywhere now.");
+    } catch (e) {
+      toast("Spending did not save.", { description: e?.response?.data?.detail || e?.message || "No useful error returned." });
     } finally {
       setBusy(false);
     }
@@ -118,6 +121,8 @@ function BudgetV1() {
       await markSpendingCheckin({ date: spend.date || todayIso() });
       await load();
       toast("Noted. Zero-spend days still count as noticing.");
+    } catch (e) {
+      toast("Check-in did not save.", { description: e?.response?.data?.detail || e?.message || "No useful error returned." });
     } finally {
       setBusy(false);
     }

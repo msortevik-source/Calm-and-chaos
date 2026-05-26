@@ -481,6 +481,58 @@ def _budget_summary(month: str, setup: Dict[str, Any], spending: List[Dict[str, 
         "observations": observations,
     }
 
+async def _budget_setup_persistent(month: str, store: Dict[str, Any]) -> Dict[str, Any]:
+    setup = None
+    try:
+        setup = await db.budget_setups_v1.find_one({"month": month}, {"_id": 0})
+    except Exception:
+        logging.exception("mongo unavailable for budget setup read")
+    setup = setup or store.get("budget_setups", {}).get(month) or {
+        "month": month,
+        "income": DEFAULT_INCOME,
+        "income_notes": {},
+        "fixed_expenses": DEFAULT_FIXED_EXPENSES,
+        "fixed_notes": {},
+        "fixed_active": {key: True for key in DEFAULT_FIXED_EXPENSES},
+    }
+    return {
+        **setup,
+        "income": {**DEFAULT_INCOME, **setup.get("income", {})},
+        "income_notes": setup.get("income_notes", {}),
+        "fixed_expenses": {**DEFAULT_FIXED_EXPENSES, **setup.get("fixed_expenses", {})},
+        "fixed_notes": setup.get("fixed_notes", {}),
+        "fixed_active": {
+            key: setup.get("fixed_active", {}).get(key, True)
+            for key in {**DEFAULT_FIXED_EXPENSES, **setup.get("fixed_expenses", {})}
+        },
+    }
+
+async def _spending_persistent(month: Optional[str] = None, store: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+    store = store or _read_life_store()
+    mongo_docs = []
+    query = {"date": {"$regex": f"^{month}"}} if month else {}
+    try:
+        mongo_docs = await db.spending_v1.find(query, {"_id": 0}).sort("timestamp", -1).to_list(1000)
+    except Exception:
+        logging.exception("mongo unavailable for spending read")
+    local_docs = store.get("spending", [])
+    if month:
+        local_docs = [s for s in local_docs if (s.get("date") or "").startswith(month)]
+    return sorted(_merge_docs_by_id(mongo_docs, local_docs), key=lambda x: x.get("timestamp") or x.get("date") or "", reverse=True)
+
+async def _spending_checkins_persistent(month: Optional[str] = None, store: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+    store = store or _read_life_store()
+    mongo_docs = []
+    query = {"date": {"$regex": f"^{month}"}} if month else {}
+    try:
+        mongo_docs = await db.spending_checkins_v1.find(query, {"_id": 0}).sort("timestamp", -1).to_list(1000)
+    except Exception:
+        logging.exception("mongo unavailable for spending checkin read")
+    local_docs = store.get("spending_checkins", [])
+    if month:
+        local_docs = [s for s in local_docs if (s.get("date") or "").startswith(month)]
+    return _merge_docs_by_id(mongo_docs, local_docs)
+
 def _food_plan(req: FoodPlanCreate) -> Dict[str, Any]:
     week_start = _week_start(req.week_start)
     start = date_cls.fromisoformat(week_start)
@@ -1968,24 +2020,11 @@ async def budget_delete(entry_id: str):
 async def budget_v1(month: Optional[str] = None):
     month = _month_key(month)
     store = await _read_persistent_life_store()
-    setup = store["budget_setups"].get(month) or {
-        "month": month,
-        "income": DEFAULT_INCOME,
-        "income_notes": {},
-        "fixed_expenses": DEFAULT_FIXED_EXPENSES,
-        "fixed_notes": {},
-        "fixed_active": {key: True for key in DEFAULT_FIXED_EXPENSES},
-    }
-    setup = {
-        **setup,
-        "income": {**DEFAULT_INCOME, **setup.get("income", {})},
-        "income_notes": setup.get("income_notes", {}),
-        "fixed_expenses": {**DEFAULT_FIXED_EXPENSES, **setup.get("fixed_expenses", {})},
-        "fixed_notes": setup.get("fixed_notes", {}),
-        "fixed_active": {key: setup.get("fixed_active", {}).get(key, True) for key in {**DEFAULT_FIXED_EXPENSES, **setup.get("fixed_expenses", {})}},
-    }
-    spending = [s for s in store["spending"] if (s.get("date") or "").startswith(month)]
-    summary = _budget_summary(month, setup, store["spending"], store=store)
+    setup = await _budget_setup_persistent(month, store)
+    spending = await _spending_persistent(month, store)
+    checkins = await _spending_checkins_persistent(month, store)
+    summary_store = {**store, "spending_checkins": checkins}
+    summary = _budget_summary(month, setup, spending, store=summary_store)
     return {
         "month": month,
         "setup": setup,
@@ -2010,9 +2049,16 @@ async def budget_v1_setup(req: BudgetSetup):
         },
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
+    try:
+        await db.budget_setups_v1.update_one({"month": month}, {"$set": setup}, upsert=True)
+    except Exception as exc:
+        logging.exception("mongo unavailable for budget setup write")
+        raise HTTPException(status_code=503, detail=f"Could not save budget setup: {exc}")
     store["budget_setups"][month] = setup
     await _write_persistent_life_store(store)
-    return {"setup": setup, "summary": _budget_summary(month, setup, store["spending"], store=store)}
+    spending = await _spending_persistent(month, store)
+    checkins = await _spending_checkins_persistent(month, store)
+    return {"setup": setup, "summary": _budget_summary(month, setup, spending, store={**store, "spending_checkins": checkins})}
 
 @api_router.post("/budget/v1/spending", response_model=SpendingEntry)
 async def budget_v1_spending(req: SpendingCreate):
@@ -2024,11 +2070,21 @@ async def budget_v1_spending(req: SpendingCreate):
     entry.category = _normalize_spending_category(entry.category)
     doc = entry.model_dump()
     doc["timestamp"] = doc["timestamp"].isoformat()
+    try:
+        await db.spending_v1.insert_one(doc)
+    except Exception as exc:
+        logging.exception("mongo unavailable for spending write")
+        raise HTTPException(status_code=503, detail=f"Could not save spending: {exc}")
     store = await _read_persistent_life_store()
     store["spending"].append(doc)
     store.setdefault("spending_checkins", [])
     if entry.date not in {c.get("date") for c in store["spending_checkins"]}:
-        store["spending_checkins"].append({"date": entry.date, "timestamp": doc["timestamp"]})
+        checkin = {"id": str(uuid.uuid4()), "date": entry.date, "timestamp": doc["timestamp"]}
+        try:
+            await db.spending_checkins_v1.update_one({"date": entry.date}, {"$set": checkin}, upsert=True)
+        except Exception:
+            logging.exception("mongo unavailable for spending checkin write after spending")
+        store["spending_checkins"].append(checkin)
     await _write_persistent_life_store(store)
     return entry
 
@@ -2038,24 +2094,31 @@ async def budget_v1_checkin(req: SpendingCheckinCreate):
     store = await _read_persistent_life_store()
     store.setdefault("spending_checkins", [])
     if entry_date not in {c.get("date") for c in store["spending_checkins"]}:
-        store["spending_checkins"].append({
+        checkin = {
+            "id": str(uuid.uuid4()),
             "date": entry_date,
             "timestamp": datetime.now(timezone.utc).isoformat(),
-        })
+        }
+        try:
+            await db.spending_checkins_v1.update_one({"date": entry_date}, {"$set": checkin}, upsert=True)
+        except Exception as exc:
+            logging.exception("mongo unavailable for spending checkin write")
+            raise HTTPException(status_code=503, detail=f"Could not save spending check-in: {exc}")
+        store["spending_checkins"].append(checkin)
         await _write_persistent_life_store(store)
     month = _month_key(entry_date[:7])
-    setup = store["budget_setups"].get(month) or {
-        "month": month,
-        "income": DEFAULT_INCOME,
-        "income_notes": {},
-        "fixed_expenses": DEFAULT_FIXED_EXPENSES,
-        "fixed_notes": {},
-        "fixed_active": {key: True for key in DEFAULT_FIXED_EXPENSES},
-    }
-    return {"ok": True, "summary": _budget_summary(month, setup, store["spending"], store=store)}
+    setup = await _budget_setup_persistent(month, store)
+    spending = await _spending_persistent(month, store)
+    checkins = await _spending_checkins_persistent(month, store)
+    return {"ok": True, "summary": _budget_summary(month, setup, spending, store={**store, "spending_checkins": checkins})}
 
 @api_router.delete("/budget/v1/spending/{entry_id}")
 async def budget_v1_spending_delete(entry_id: str):
+    try:
+        await db.spending_v1.delete_one({"id": entry_id})
+    except Exception as exc:
+        logging.exception("mongo unavailable for spending delete")
+        raise HTTPException(status_code=503, detail=f"Could not delete spending: {exc}")
     store = await _read_persistent_life_store()
     store["spending"] = [s for s in store["spending"] if s.get("id") != entry_id]
     await _write_persistent_life_store(store)
