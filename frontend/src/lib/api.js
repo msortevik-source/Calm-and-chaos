@@ -7,7 +7,7 @@ const isLocalBrowser = ["localhost", "127.0.0.1"].includes(window.location.hostn
 const envLooksLocal = envBackend && /localhost|127\.0\.0\.1/.test(envBackend);
 const BASE = ((envLooksLocal && !isLocalBrowser) ? PROD_BACKEND : (envBackend || (isLocalBrowser ? LOCAL_BACKEND : PROD_BACKEND))).replace(/\/$/, "");
 export const API = `${BASE}/api`;
-export const BUILD_MARKER = "budget-fixed-rows-cors-2026-05-25";
+export const BUILD_MARKER = "mongo-persistence-sync-2026-05-26";
 
 export const api = axios.create({ baseURL: API, timeout: 60000 });
 

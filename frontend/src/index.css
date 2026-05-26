@@ -19,7 +19,7 @@ html, body, #root {
 body {
   margin: 0;
   /* Rainy cabin moss: still dark, with the lamp actually on. */
-  background-color: #202620;
+  background-color: #26302A;
   color: #F1E8D8;
   font-family: 'Manrope', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
@@ -30,24 +30,24 @@ body {
 
 @layer base {
   :root {
-    --background: 120 9% 14%;
+    --background: 125 12% 17%;
     --foreground: 37 38% 90%;
-    --card: 105 9% 18%;
+    --card: 112 11% 22%;
     --card-foreground: 37 38% 90%;
-    --popover: 105 9% 18%;
+    --popover: 112 11% 22%;
     --popover-foreground: 37 38% 90%;
     --primary: 130 15% 29%;
     --primary-foreground: 37 38% 90%;
-    --secondary: 105 9% 21%;
+    --secondary: 112 10% 24%;
     --secondary-foreground: 37 38% 90%;
-    --muted: 105 9% 21%;
+    --muted: 112 10% 24%;
     --muted-foreground: 42 16% 68%;
     --accent: 28 51% 64%;
     --accent-foreground: 105 14% 12%;
     --destructive: 8 60% 45%;
     --destructive-foreground: 37 38% 90%;
-    --border: 105 10% 25%;
-    --input: 105 9% 22%;
+    --border: 112 12% 31%;
+    --input: 112 11% 27%;
     --ring: 28 51% 64%;
     --radius: 1rem;
   }
@@ -66,8 +66,7 @@ body {
   pointer-events: none;
   z-index: 0;
   background:
-    radial-gradient(70% 40% at 18% 0%, rgba(212, 163, 115, 0.055) 0%, transparent 62%),
-    radial-gradient(60% 55% at 100% 100%, rgba(119, 145, 115, 0.055) 0%, transparent 68%);
+    radial-gradient(60% 34% at 18% 0%, rgba(212, 163, 115, 0.045) 0%, transparent 64%);
 }
 
 /* Subtle grain overlay */
@@ -77,7 +76,7 @@ body {
   inset: 0;
   pointer-events: none;
   z-index: 1;
-  opacity: 0.010;
+  opacity: 0.006;
   mix-blend-mode: soft-light;
   background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.95 0 0 0 0 0.88 0 0 0 0 0.76 0 0 0 0.45 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
 }
@@ -129,9 +128,9 @@ body {
 
 /* Warm card surface */
 .warm-card {
-  background: linear-gradient(180deg, rgba(49, 59, 51, 0.96) 0%, rgba(38, 47, 40, 0.96) 100%);
-  border: 1px solid #4A594B;
-  box-shadow: 0 1px 0 rgba(241,232,216,0.05) inset, 0 10px 26px rgba(8,12,9,0.14);
+  background: linear-gradient(180deg, rgba(58, 70, 59, 0.97) 0%, rgba(48, 59, 50, 0.97) 100%);
+  border: 1px solid #5A6A5B;
+  box-shadow: 0 1px 0 rgba(241,232,216,0.055) inset, 0 8px 18px rgba(8,12,9,0.10);
 }
 
 @media (max-width: 767px) {
@@ -145,7 +144,7 @@ body {
   }
 
   .warm-card {
-    background: linear-gradient(180deg, rgba(51, 62, 53, 0.98) 0%, rgba(40, 50, 42, 0.98) 100%);
+    background: linear-gradient(180deg, rgba(61, 74, 62, 0.98) 0%, rgba(51, 63, 53, 0.98) 100%);
   }
 }
 

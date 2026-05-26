@@ -15,6 +15,10 @@ import {
 const todayIso = () => new Date().toISOString().slice(0, 10);
 const monthKey = () => todayIso().slice(0, 7);
 const inputCls = "bg-moss-800/60 border border-moss-700 rounded-xl px-3 py-2 text-sm text-moss-50 placeholder-moss-200/50 outline-none focus:border-amber/50 transition-colors";
+const FALLBACK_SPENDING_CATEGORIES = ["groceries", "snus", "Monster / energy drink", "candy / snacks", "takeaway", "coffee", "transport", "random nonsense", "other"];
+const FALLBACK_LUNCH_OPTIONS = ["chicken pasta salad", "rice bowls", "wraps", "soup + sandwich", "pasta bake"];
+const FALLBACK_PROTEIN_OPTIONS = ["chicken week", "minced meat week", "pork week", "salmon week", "cheap week"];
+const FALLBACK_BUDGET_FEELINGS = ["normal", "tighter", "treat week"];
 
 const money = (value, decimals = 0) => {
   const amount = Number(value || 0);
@@ -120,6 +124,17 @@ function BudgetV1() {
   };
 
   const summary = data?.summary || {};
+  const spendingCategories = data?.categories?.length ? data.categories : FALLBACK_SPENDING_CATEGORIES;
+  const groupedSpending = useMemo(() => {
+    const groups = {};
+    (data?.spending || []).forEach((entry) => {
+      const category = entry.category || "other";
+      if (!groups[category]) groups[category] = { total: 0, entries: [] };
+      groups[category].total += Number(entry.amount || 0);
+      groups[category].entries.push(entry);
+    });
+    return Object.entries(groups).sort((a, b) => b[1].total - a[1].total);
+  }, [data?.spending]);
   const incomeEntries = Object.entries(setup.income || {});
   const fixedEntries = Object.entries(setup.fixed_expenses || {});
   const fixedActive = setup.fixed_active || summary.fixed_active || {};
@@ -220,7 +235,7 @@ function BudgetV1() {
           <div className="grid grid-cols-1 gap-2">
             <input data-testid="spending-amount" type="number" step="0.01" placeholder="amount in kr" value={spend.amount || ""} onChange={(e) => setSpend((p) => ({ ...p, amount: e.target.value }))} className={inputCls} />
             <select data-testid="spending-category" value={spend.category} onChange={(e) => setSpend((p) => ({ ...p, category: e.target.value }))} className={inputCls}>
-              {(data?.categories || []).map((cat) => <option key={cat} value={cat}>{cat}</option>)}
+              {spendingCategories.map((cat) => <option key={cat} value={cat}>{cat}</option>)}
             </select>
             <input data-testid="spending-date" type="date" value={spend.date} onChange={(e) => setSpend((p) => ({ ...p, date: e.target.value }))} className={inputCls} />
             <input data-testid="spending-note" placeholder="note, if useful" value={spend.note || ""} onChange={(e) => setSpend((p) => ({ ...p, note: e.target.value }))} className={inputCls} />
@@ -255,6 +270,29 @@ function BudgetV1() {
       </div>
 
       <div className="space-y-2" data-testid="spending-list">
+        {groupedSpending.length > 0 && (
+          <div className="warm-card rounded-3xl p-5 mb-4" data-testid="spending-category-overview">
+            <div className="text-xs uppercase tracking-[0.22em] text-moss-200/70 mb-4">monthly category overview</div>
+            <div className="grid md:grid-cols-2 gap-3">
+              {groupedSpending.map(([category, group]) => (
+                <div key={category} className="rounded-2xl border border-moss-700/70 bg-moss-800/35 p-4">
+                  <div className="flex items-center justify-between gap-3 mb-2">
+                    <div className="font-heading text-lg text-moss-50">{category}</div>
+                    <div className="text-amber font-heading">{money(group.total)}</div>
+                  </div>
+                  <div className="space-y-1">
+                    {group.entries.map((entry) => (
+                      <div key={entry.id} className="flex items-center justify-between gap-3 text-sm text-moss-100">
+                        <span className="truncate">{entry.date}{entry.note ? ` - ${entry.note}` : ""}</span>
+                        <span className="text-moss-50 shrink-0">{money(entry.amount, 2)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
         {(data?.spending || []).slice(0, 12).map((entry) => (
           <div key={entry.id} className="warm-card rounded-2xl p-4 flex items-center gap-3">
             <div className="text-amber font-heading text-sm w-24 shrink-0">{entry.date}</div>
@@ -315,6 +353,9 @@ function FoodV1() {
 
   const plan = data?.plan;
   const planDays = useMemo(() => plan?.days || [], [plan]);
+  const lunchOptions = data?.lunch_options?.length ? data.lunch_options : FALLBACK_LUNCH_OPTIONS;
+  const proteinOptions = data?.protein_options?.length ? data.protein_options : FALLBACK_PROTEIN_OPTIONS;
+  const budgetFeelings = data?.budget_feelings?.length ? data.budget_feelings : FALLBACK_BUDGET_FEELINGS;
 
   return (
     <section className="space-y-6" data-testid="food-v1">
@@ -329,17 +370,17 @@ function FoodV1() {
         <div className="grid md:grid-cols-3 gap-3">
           <input data-testid="food-week-start" type="date" value={form.week_start || ""} onChange={(e) => setField("week_start", e.target.value)} className={inputCls} />
           <select data-testid="food-lunch" value={form.lunch_week || ""} onChange={(e) => setField("lunch_week", e.target.value)} className={inputCls}>
-            {(data?.lunch_options || []).map((item) => <option key={item} value={item}>{item}</option>)}
+            {lunchOptions.map((item) => <option key={item} value={item}>{item}</option>)}
           </select>
           <select data-testid="food-budget-feeling" value={form.budget_feeling || "normal"} onChange={(e) => setField("budget_feeling", e.target.value)} className={inputCls}>
-            {(data?.budget_feelings || []).map((item) => <option key={item} value={item}>{item}</option>)}
+            {budgetFeelings.map((item) => <option key={item} value={item}>{item}</option>)}
           </select>
           <input data-testid="food-breakfast" value={form.breakfast_default || ""} onChange={(e) => setField("breakfast_default", e.target.value)} placeholder="breakfast default" className={inputCls + " md:col-span-3"} />
         </div>
         <div className="mt-4">
           <div className="text-xs uppercase tracking-[0.22em] text-moss-200/70 mb-2">proteins, pick 2-4 if possible</div>
           <div className="flex flex-wrap gap-2">
-            {(data?.protein_options || []).map((item) => {
+            {proteinOptions.map((item) => {
               const active = proteinChoices.includes(item);
               return (
                 <button

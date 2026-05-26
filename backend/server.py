@@ -313,13 +313,16 @@ def _days_in_month(month: str) -> int:
         nxt = date_cls(year, month_num + 1, 1)
     return (nxt - date_cls(year, month_num, 1)).days
 
+def _empty_life_store() -> Dict[str, Any]:
+    return {"budget_setups": {}, "spending": [], "spending_checkins": [], "food_plans": {}, "braindumps": [], "training": [], "life_upgrades": []}
+
 def _read_life_store() -> Dict[str, Any]:
     if not LOCAL_LIFE_FILE.exists():
-        return {"budget_setups": {}, "spending": [], "spending_checkins": [], "food_plans": {}, "braindumps": [], "training": [], "life_upgrades": []}
+        return _empty_life_store()
     try:
         data = json.loads(LOCAL_LIFE_FILE.read_text(encoding="utf-8"))
         if not isinstance(data, dict):
-            return {"budget_setups": {}, "spending": [], "spending_checkins": [], "food_plans": {}, "braindumps": [], "training": [], "life_upgrades": []}
+            return _empty_life_store()
         data.setdefault("budget_setups", {})
         data.setdefault("spending", [])
         data.setdefault("spending_checkins", [])
@@ -330,10 +333,58 @@ def _read_life_store() -> Dict[str, Any]:
         return data
     except Exception:
         logging.exception("failed reading life planning store")
-        return {"budget_setups": {}, "spending": [], "spending_checkins": [], "food_plans": {}, "braindumps": [], "training": [], "life_upgrades": []}
+        return _empty_life_store()
 
 def _write_life_store(data: Dict[str, Any]):
     LOCAL_LIFE_FILE.write_text(json.dumps(data, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
+
+def _merge_docs_by_id(primary: List[Dict[str, Any]], fallback: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    merged = []
+    seen = set()
+    for item in [*(primary or []), *(fallback or [])]:
+        key = item.get("id") or item.get("strava_id") or json.dumps(item, sort_keys=True, default=str)
+        if key in seen:
+            continue
+        seen.add(key)
+        merged.append(item)
+    return merged
+
+def _merge_life_stores(mongo_store: Optional[Dict[str, Any]], local_store: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    mongo_store = mongo_store or _empty_life_store()
+    local_store = local_store or _empty_life_store()
+    merged = _empty_life_store()
+    merged["budget_setups"] = {**local_store.get("budget_setups", {}), **mongo_store.get("budget_setups", {})}
+    merged["food_plans"] = {**local_store.get("food_plans", {}), **mongo_store.get("food_plans", {})}
+    for key in ("spending", "spending_checkins", "braindumps", "training", "life_upgrades"):
+        merged[key] = _merge_docs_by_id(mongo_store.get(key, []), local_store.get(key, []))
+    return merged
+
+async def _read_persistent_life_store() -> Dict[str, Any]:
+    local_store = _read_life_store()
+    try:
+        doc = await db.app_state.find_one({"key": "life_store"}, {"_id": 0})
+        mongo_store = (doc or {}).get("data") if doc else None
+        merged = _merge_life_stores(mongo_store, local_store)
+        if merged != (mongo_store or _empty_life_store()):
+            await _write_persistent_life_store(merged)
+        return merged
+    except Exception:
+        logging.exception("mongo unavailable for life store read; using local fallback")
+        return local_store
+
+async def _write_persistent_life_store(data: Dict[str, Any]):
+    try:
+        await db.app_state.update_one(
+            {"key": "life_store"},
+            {"$set": {"key": "life_store", "data": data, "updated_at": datetime.now(timezone.utc).isoformat()}},
+            upsert=True,
+        )
+    except Exception:
+        logging.exception("mongo unavailable for life store write; using local fallback")
+    try:
+        _write_life_store(data)
+    except Exception:
+        logging.exception("failed writing local life store fallback")
 
 def _local_collection(name: str, limit: int = 500):
     store = _read_life_store()
@@ -382,7 +433,7 @@ def _normalize_spending_category(category: str) -> str:
             return item
     return "other"
 
-def _budget_summary(month: str, setup: Dict[str, Any], spending: List[Dict[str, Any]]) -> Dict[str, Any]:
+def _budget_summary(month: str, setup: Dict[str, Any], spending: List[Dict[str, Any]], store: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     income = _money_dict({**DEFAULT_INCOME, **setup.get("income", {})})
     fixed_all = _money_dict({**DEFAULT_FIXED_EXPENSES, **setup.get("fixed_expenses", {})})
     fixed_active = {key: bool(value) for key, value in setup.get("fixed_active", {}).items()}
@@ -394,7 +445,7 @@ def _budget_summary(month: str, setup: Dict[str, Any], spending: List[Dict[str, 
     for entry in month_spending:
         cat = _normalize_spending_category(entry.get("category") or "other")
         by_category[cat] = by_category.get(cat, 0) + float(entry.get("amount") or 0)
-    store = _read_life_store()
+    store = store or _read_life_store()
     checked_dates = {s.get("date") for s in month_spending if s.get("date")}
     checked_dates.update(
         c.get("date") for c in store.get("spending_checkins", [])
@@ -1258,8 +1309,8 @@ def _context_date_for_text(text: str):
         return (today - timedelta(days=1)).isoformat(), "yesterday"
     return None, None
 
-def _budget_router_context(text: str) -> str:
-    store = _read_life_store()
+def _budget_router_context(text: str, store: Optional[Dict[str, Any]] = None) -> str:
+    store = store or _read_life_store()
     month = _now_oslo().strftime("%Y-%m")
     setup = store.get("budget_setups", {}).get(month) or {"income": DEFAULT_INCOME, "fixed_expenses": DEFAULT_FIXED_EXPENSES}
     summary = _budget_summary(month, setup, store.get("spending", []))
@@ -1290,8 +1341,8 @@ def _budget_router_context(text: str) -> str:
         ))
     return "\n".join(lines)
 
-def _food_router_context(text: str) -> str:
-    store = _read_life_store()
+def _food_router_context(text: str, store: Optional[Dict[str, Any]] = None) -> str:
+    store = store or _read_life_store()
     plans = store.get("food_plans", {})
     lines = ["food:"]
     if plans:
@@ -1436,14 +1487,14 @@ async def _gather_context_v2(text: str) -> str:
     intents = _context_intents(text)
     intent_set = set(intents)
     mixed = len(intent_set - {"planning"}) > 1
-    store = _read_life_store()
+    store = await _read_persistent_life_store()
     context_parts = []
     lower = text.lower()
 
     if "budget" in intent_set:
-        context_parts.append(_budget_router_context(text))
+        context_parts.append(_budget_router_context(text, store=store))
     if "food" in intent_set or ("planning" in intent_set and any(w in lower for w in ("eat", "food", "meal", "shopping", "grocery"))):
-        context_parts.append(_food_router_context(text))
+        context_parts.append(_food_router_context(text, store=store))
     if "training" in intent_set or ("food" in intent_set and "week" in lower):
         mongo_training = await _recent_mongo_docs("training", limit=5)
         context_parts.append(_training_router_context(store.get("training", [])[-10:], mongo_training, text))
@@ -1455,7 +1506,7 @@ async def _gather_context_v2(text: str) -> str:
         if calendar_context:
             context_parts.append(calendar_context)
     if "planning" in intent_set and not any(i in intent_set for i in ("food", "training", "budget", "calendar")):
-        context_parts.append(_food_router_context(text))
+        context_parts.append(_food_router_context(text, store=store))
         mongo_training = await _recent_mongo_docs("training", limit=4)
         context_parts.append(_training_router_context(store.get("training", [])[-8:], mongo_training, text))
     if "patterns" in intent_set:
@@ -1910,7 +1961,7 @@ async def budget_delete(entry_id: str):
 @api_router.get("/budget/v1")
 async def budget_v1(month: Optional[str] = None):
     month = _month_key(month)
-    store = _read_life_store()
+    store = await _read_persistent_life_store()
     setup = store["budget_setups"].get(month) or {
         "month": month,
         "income": DEFAULT_INCOME,
@@ -1928,7 +1979,7 @@ async def budget_v1(month: Optional[str] = None):
         "fixed_active": {key: setup.get("fixed_active", {}).get(key, True) for key in {**DEFAULT_FIXED_EXPENSES, **setup.get("fixed_expenses", {})}},
     }
     spending = [s for s in store["spending"] if (s.get("date") or "").startswith(month)]
-    summary = _budget_summary(month, setup, store["spending"])
+    summary = _budget_summary(month, setup, store["spending"], store=store)
     return {
         "month": month,
         "setup": setup,
@@ -1940,7 +1991,7 @@ async def budget_v1(month: Optional[str] = None):
 @api_router.put("/budget/v1/setup")
 async def budget_v1_setup(req: BudgetSetup):
     month = _month_key(req.month)
-    store = _read_life_store()
+    store = await _read_persistent_life_store()
     setup = {
         "month": month,
         "income": _money_dict({**DEFAULT_INCOME, **req.income}),
@@ -1954,8 +2005,8 @@ async def budget_v1_setup(req: BudgetSetup):
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
     store["budget_setups"][month] = setup
-    _write_life_store(store)
-    return {"setup": setup, "summary": _budget_summary(month, setup, store["spending"])}
+    await _write_persistent_life_store(store)
+    return {"setup": setup, "summary": _budget_summary(month, setup, store["spending"], store=store)}
 
 @api_router.post("/budget/v1/spending", response_model=SpendingEntry)
 async def budget_v1_spending(req: SpendingCreate):
@@ -1967,25 +2018,25 @@ async def budget_v1_spending(req: SpendingCreate):
     entry.category = _normalize_spending_category(entry.category)
     doc = entry.model_dump()
     doc["timestamp"] = doc["timestamp"].isoformat()
-    store = _read_life_store()
+    store = await _read_persistent_life_store()
     store["spending"].append(doc)
     store.setdefault("spending_checkins", [])
     if entry.date not in {c.get("date") for c in store["spending_checkins"]}:
         store["spending_checkins"].append({"date": entry.date, "timestamp": doc["timestamp"]})
-    _write_life_store(store)
+    await _write_persistent_life_store(store)
     return entry
 
 @api_router.post("/budget/v1/checkin")
 async def budget_v1_checkin(req: SpendingCheckinCreate):
     entry_date = req.date or datetime.now(timezone.utc).date().isoformat()
-    store = _read_life_store()
+    store = await _read_persistent_life_store()
     store.setdefault("spending_checkins", [])
     if entry_date not in {c.get("date") for c in store["spending_checkins"]}:
         store["spending_checkins"].append({
             "date": entry_date,
             "timestamp": datetime.now(timezone.utc).isoformat(),
         })
-        _write_life_store(store)
+        await _write_persistent_life_store(store)
     month = _month_key(entry_date[:7])
     setup = store["budget_setups"].get(month) or {
         "month": month,
@@ -1995,19 +2046,19 @@ async def budget_v1_checkin(req: SpendingCheckinCreate):
         "fixed_notes": {},
         "fixed_active": {key: True for key in DEFAULT_FIXED_EXPENSES},
     }
-    return {"ok": True, "summary": _budget_summary(month, setup, store["spending"])}
+    return {"ok": True, "summary": _budget_summary(month, setup, store["spending"], store=store)}
 
 @api_router.delete("/budget/v1/spending/{entry_id}")
 async def budget_v1_spending_delete(entry_id: str):
-    store = _read_life_store()
+    store = await _read_persistent_life_store()
     store["spending"] = [s for s in store["spending"] if s.get("id") != entry_id]
-    _write_life_store(store)
+    await _write_persistent_life_store(store)
     return {"ok": True}
 
 # Life Upgrades / Future Me Board
 @api_router.get("/life-upgrades")
 async def life_upgrades_list():
-    store = _read_life_store()
+    store = await _read_persistent_life_store()
     items = sorted(store.get("life_upgrades", []), key=lambda x: x.get("timestamp", ""), reverse=True)
     return {
         "items": items,
@@ -2024,15 +2075,15 @@ async def life_upgrades_create(req: LifeUpgradeCreate):
     item = LifeUpgradeItem(**{**req.model_dump(), "title": title, "category": category})
     doc = item.model_dump()
     doc["timestamp"] = doc["timestamp"].isoformat()
-    store = _read_life_store()
+    store = await _read_persistent_life_store()
     store.setdefault("life_upgrades", [])
     store["life_upgrades"].append(doc)
-    _write_life_store(store)
+    await _write_persistent_life_store(store)
     return item
 
 @api_router.patch("/life-upgrades/{item_id}")
 async def life_upgrades_update(item_id: str, req: LifeUpgradeUpdate):
-    store = _read_life_store()
+    store = await _read_persistent_life_store()
     items = store.setdefault("life_upgrades", [])
     for item in items:
         if item.get("id") != item_id:
@@ -2049,16 +2100,16 @@ async def life_upgrades_update(item_id: str, req: LifeUpgradeUpdate):
             updates["completed"] = completed
             updates["completed_date"] = datetime.now(timezone.utc).date().isoformat() if completed else None
         item.update(updates)
-        _write_life_store(store)
+        await _write_persistent_life_store(store)
         return {"item": item}
     raise HTTPException(status_code=404, detail="life upgrade not found")
 
 @api_router.delete("/life-upgrades/{item_id}")
 async def life_upgrades_delete(item_id: str):
-    store = _read_life_store()
+    store = await _read_persistent_life_store()
     before = len(store.get("life_upgrades", []))
     store["life_upgrades"] = [item for item in store.get("life_upgrades", []) if item.get("id") != item_id]
-    _write_life_store(store)
+    await _write_persistent_life_store(store)
     return {"ok": True, "deleted": before - len(store["life_upgrades"])}
 
 # Meals
@@ -2087,7 +2138,7 @@ async def meal_delete(entry_id: str):
 @api_router.get("/food/v1")
 async def food_v1(week_start: Optional[str] = None):
     week_start = _week_start(week_start)
-    store = _read_life_store()
+    store = await _read_persistent_life_store()
     plan = store["food_plans"].get(week_start)
     if not plan:
         plan = _food_plan(FoodPlanCreate(week_start=week_start))
@@ -2102,9 +2153,9 @@ async def food_v1(week_start: Optional[str] = None):
 @api_router.put("/food/v1")
 async def food_v1_save(req: FoodPlanCreate):
     plan = _food_plan(req)
-    store = _read_life_store()
+    store = await _read_persistent_life_store()
     store["food_plans"][plan["week_start"]] = plan
-    _write_life_store(store)
+    await _write_persistent_life_store(store)
     return {"plan": plan}
 
 # Patterns — gentle observations from data
