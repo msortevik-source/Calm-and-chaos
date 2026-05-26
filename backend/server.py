@@ -1909,9 +1909,15 @@ async def _strava_import_recent(limit: int = 10, types: Optional[List[str]] = No
 async def strava_import_recent(limit: int = 10, redirect: bool = False):
     try:
         result = await _strava_import_recent(limit=limit)
+    except HTTPException as exc:
+        if redirect:
+            from urllib.parse import quote
+            return RedirectResponse(f"{FRONTEND_URL}/training?strava_import=error&reason={quote(str(exc.detail))}")
+        raise
     except Exception as exc:
         if redirect:
-            return RedirectResponse(f"{FRONTEND_URL}/training?strava_import=error&reason={type(exc).__name__}")
+            from urllib.parse import quote
+            return RedirectResponse(f"{FRONTEND_URL}/training?strava_import=error&reason={quote(type(exc).__name__)}")
         raise
     if redirect:
         return RedirectResponse(
