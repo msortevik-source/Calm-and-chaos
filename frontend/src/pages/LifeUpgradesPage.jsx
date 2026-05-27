@@ -125,6 +125,8 @@ export default function LifeUpgradesPage() {
       setForm({ ...emptyForm, category: form.category });
       await load();
       toast("Parked. You no longer have to keep remembering it.");
+    } catch (e) {
+      toast("Life upgrade did not save.", { description: e?.response?.data?.detail || e?.message || "No useful error returned." });
     } finally {
       setBusy(false);
     }
@@ -135,6 +137,8 @@ export default function LifeUpgradesPage() {
     try {
       await updateLifeUpgrade(item.id, { completed: !item.completed });
       await load();
+    } catch (e) {
+      toast("Life upgrade did not update.", { description: e?.response?.data?.detail || e?.message || "No useful error returned." });
     } finally {
       setBusy(false);
     }
@@ -145,6 +149,8 @@ export default function LifeUpgradesPage() {
     try {
       await deleteLifeUpgrade(item.id);
       await load();
+    } catch (e) {
+      toast("Life upgrade did not delete.", { description: e?.response?.data?.detail || e?.message || "No useful error returned." });
     } finally {
       setBusy(false);
     }

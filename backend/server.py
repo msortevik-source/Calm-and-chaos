@@ -1602,6 +1602,30 @@ async def _gather_context_v2(text: str) -> str:
 async def root():
     return {"app": "Calm & Chaos", "status": "home"}
 
+@api_router.get("/debug/persistence")
+async def debug_persistence():
+    collections = {
+        "training": db.training,
+        "spending": db.spending_v1,
+        "budget_setups": db.budget_setups_v1,
+        "food_plans": db.food_plans_v1,
+        "life_upgrades": db.life_upgrades_v1,
+        "chat_messages": db.chat_messages,
+    }
+    result = {"mongo": "unknown", "collections": {}}
+    try:
+        await db.command("ping")
+        result["mongo"] = "ok"
+    except Exception as exc:
+        result["mongo"] = f"error: {exc}"
+        return result
+    for name, collection in collections.items():
+        try:
+            result["collections"][name] = await collection.count_documents({})
+        except Exception as exc:
+            result["collections"][name] = f"error: {exc}"
+    return result
+
 @api_router.get("/greeting", response_model=GreetingResponse)
 async def get_greeting():
     import random
@@ -2140,7 +2164,12 @@ async def budget_v1_spending_delete(entry_id: str):
 @api_router.get("/life-upgrades")
 async def life_upgrades_list():
     store = await _read_persistent_life_store()
-    items = sorted(store.get("life_upgrades", []), key=lambda x: x.get("timestamp", ""), reverse=True)
+    try:
+        mongo_items = await db.life_upgrades_v1.find({}, {"_id": 0}).sort("timestamp", -1).to_list(1000)
+    except Exception as exc:
+        logging.exception("mongo unavailable for life upgrades read")
+        raise HTTPException(status_code=503, detail=f"Could not load life upgrades: {exc}")
+    items = sorted(_merge_docs_by_id(mongo_items, store.get("life_upgrades", [])), key=lambda x: x.get("timestamp", ""), reverse=True)
     return {
         "items": items,
         "categories": LIFE_UPGRADE_CATEGORIES,
@@ -2156,6 +2185,11 @@ async def life_upgrades_create(req: LifeUpgradeCreate):
     item = LifeUpgradeItem(**{**req.model_dump(), "title": title, "category": category})
     doc = item.model_dump()
     doc["timestamp"] = doc["timestamp"].isoformat()
+    try:
+        await db.life_upgrades_v1.insert_one(doc)
+    except Exception as exc:
+        logging.exception("mongo unavailable for life upgrade save")
+        raise HTTPException(status_code=503, detail=f"Could not save life upgrade: {exc}")
     store = await _read_persistent_life_store()
     store.setdefault("life_upgrades", [])
     store["life_upgrades"].append(doc)
@@ -2165,7 +2199,14 @@ async def life_upgrades_create(req: LifeUpgradeCreate):
 @api_router.patch("/life-upgrades/{item_id}")
 async def life_upgrades_update(item_id: str, req: LifeUpgradeUpdate):
     store = await _read_persistent_life_store()
+    try:
+        current = await db.life_upgrades_v1.find_one({"id": item_id}, {"_id": 0})
+    except Exception as exc:
+        logging.exception("mongo unavailable for life upgrade update read")
+        raise HTTPException(status_code=503, detail=f"Could not update life upgrade: {exc}")
     items = store.setdefault("life_upgrades", [])
+    if current and not any(item.get("id") == item_id for item in items):
+        items.append(current)
     for item in items:
         if item.get("id") != item_id:
             continue
@@ -2181,12 +2222,22 @@ async def life_upgrades_update(item_id: str, req: LifeUpgradeUpdate):
             updates["completed"] = completed
             updates["completed_date"] = datetime.now(timezone.utc).date().isoformat() if completed else None
         item.update(updates)
+        try:
+            await db.life_upgrades_v1.update_one({"id": item_id}, {"$set": item}, upsert=True)
+        except Exception as exc:
+            logging.exception("mongo unavailable for life upgrade update")
+            raise HTTPException(status_code=503, detail=f"Could not update life upgrade: {exc}")
         await _write_persistent_life_store(store)
         return {"item": item}
     raise HTTPException(status_code=404, detail="life upgrade not found")
 
 @api_router.delete("/life-upgrades/{item_id}")
 async def life_upgrades_delete(item_id: str):
+    try:
+        await db.life_upgrades_v1.delete_one({"id": item_id})
+    except Exception as exc:
+        logging.exception("mongo unavailable for life upgrade delete")
+        raise HTTPException(status_code=503, detail=f"Could not delete life upgrade: {exc}")
     store = await _read_persistent_life_store()
     before = len(store.get("life_upgrades", []))
     store["life_upgrades"] = [item for item in store.get("life_upgrades", []) if item.get("id") != item_id]
@@ -2220,7 +2271,12 @@ async def meal_delete(entry_id: str):
 async def food_v1(week_start: Optional[str] = None):
     week_start = _week_start(week_start)
     store = await _read_persistent_life_store()
-    plan = store["food_plans"].get(week_start)
+    try:
+        plan = await db.food_plans_v1.find_one({"week_start": week_start}, {"_id": 0})
+    except Exception as exc:
+        logging.exception("mongo unavailable for food plan read")
+        raise HTTPException(status_code=503, detail=f"Could not load food plan: {exc}")
+    plan = plan or store["food_plans"].get(week_start)
     if not plan:
         plan = _food_plan(FoodPlanCreate(week_start=week_start))
     return {
@@ -2234,6 +2290,11 @@ async def food_v1(week_start: Optional[str] = None):
 @api_router.put("/food/v1")
 async def food_v1_save(req: FoodPlanCreate):
     plan = _food_plan(req)
+    try:
+        await db.food_plans_v1.update_one({"week_start": plan["week_start"]}, {"$set": plan}, upsert=True)
+    except Exception as exc:
+        logging.exception("mongo unavailable for food plan save")
+        raise HTTPException(status_code=503, detail=f"Could not save food plan: {exc}")
     store = await _read_persistent_life_store()
     store["food_plans"][plan["week_start"]] = plan
     await _write_persistent_life_store(store)

@@ -95,6 +95,8 @@ function BudgetV1() {
       });
       await load();
       toast("Month saved. Future you gets a chair.");
+    } catch (e) {
+      toast("Month did not save.", { description: e?.response?.data?.detail || e?.message || "No useful error returned." });
     } finally {
       setBusy(false);
     }
@@ -351,6 +353,8 @@ function FoodV1() {
       setData((prev) => ({ ...prev, plan: res.plan, week_start: res.plan.week_start }));
       setForm(res.plan.inputs);
       toast("Week handled. Civilization may continue.");
+    } catch (e) {
+      toast("Food plan did not save.", { description: e?.response?.data?.detail || e?.message || "No useful error returned." });
     } finally {
       setBusy(false);
     }
