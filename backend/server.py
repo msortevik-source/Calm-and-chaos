@@ -363,6 +363,9 @@ def _merge_docs_by_id(primary: List[Dict[str, Any]], fallback: List[Dict[str, An
         merged.append(item)
     return merged
 
+def _json_safe_doc(value: Any) -> Any:
+    return json.loads(json.dumps(value, ensure_ascii=False, default=str))
+
 def _merge_life_stores(mongo_store: Optional[Dict[str, Any]], local_store: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     mongo_store = mongo_store or _empty_life_store()
     local_store = local_store or _empty_life_store()
@@ -2225,6 +2228,7 @@ async def life_upgrades_update(item_id: str, req: LifeUpgradeUpdate):
             updates["completed"] = completed
             updates["completed_date"] = datetime.now(timezone.utc).date().isoformat() if completed else None
         item.update(updates)
+        item = _json_safe_doc(item)
         try:
             await db.life_upgrades_v1.update_one({"id": item_id}, {"$set": item}, upsert=True)
         except Exception as exc:
