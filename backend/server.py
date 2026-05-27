@@ -75,6 +75,7 @@ STRAVA_REDIRECT_URI = os.environ.get('STRAVA_REDIRECT_URI') or f"{APP_PUBLIC_URL
 
 SINGLE_USER_ID = "house-goblin"  # single-user app, fixed id
 SESSION_ID = "calm-and-chaos-main"
+APP_BUILD = "2026-05-27-persistence-v2"
 
 app = FastAPI()
 api_router = APIRouter(prefix="/api")
@@ -1618,7 +1619,7 @@ async def debug_persistence():
         "life_upgrades": db.life_upgrades_v1,
         "chat_messages": db.chat_messages,
     }
-    result = {"mongo": "unknown", "collections": {}}
+    result = {"build": APP_BUILD, "mongo": "unknown", "collections": {}}
     try:
         await db.command("ping")
         result["mongo"] = "ok"
@@ -2234,7 +2235,6 @@ async def life_upgrades_update(item_id: str, req: LifeUpgradeUpdate):
         except Exception as exc:
             logging.exception("mongo unavailable for life upgrade update")
             raise HTTPException(status_code=503, detail=f"Could not update life upgrade: {exc}")
-        await _write_persistent_life_store(store)
         return {"ok": True, "id": item_id}
     raise HTTPException(status_code=404, detail="life upgrade not found")
 
