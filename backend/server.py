@@ -2235,7 +2235,7 @@ async def life_upgrades_update(item_id: str, req: LifeUpgradeUpdate):
             logging.exception("mongo unavailable for life upgrade update")
             raise HTTPException(status_code=503, detail=f"Could not update life upgrade: {exc}")
         await _write_persistent_life_store(store)
-        return {"item": item}
+        return {"ok": True, "id": item_id}
     raise HTTPException(status_code=404, detail="life upgrade not found")
 
 @api_router.delete("/life-upgrades/{item_id}")
