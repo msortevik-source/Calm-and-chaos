@@ -1798,9 +1798,9 @@ async def training_create(req: TrainingCreate):
     doc["timestamp"] = doc["timestamp"].isoformat()
     try:
         await db.training.insert_one(doc)
-    except Exception:
-        logging.exception("mongo unavailable for training save; using local fallback")
-        _append_local_collection("training", doc)
+    except Exception as exc:
+        logging.exception("mongo unavailable for training save")
+        raise HTTPException(status_code=503, detail=f"Could not save training: {exc}")
     return entry
 
 @api_router.get("/training")
@@ -1822,8 +1822,9 @@ async def training_list(limit: int = 100):
 async def training_delete(entry_id: str):
     try:
         await db.training.delete_one({"id": entry_id})
-    except Exception:
-        logging.warning("mongo unavailable for training delete; using local fallback")
+    except Exception as exc:
+        logging.exception("mongo unavailable for training delete")
+        raise HTTPException(status_code=503, detail=f"Could not delete training: {exc}")
     _delete_local_collection("training", entry_id)
     return {"ok": True}
 
@@ -1959,9 +1960,9 @@ async def _strava_import_recent(limit: int = 10, types: Optional[List[str]] = No
             continue
         try:
             await db.training.insert_one(entry)
-        except Exception:
-            logging.warning("mongo unavailable for Strava import save; using local fallback")
-            store["training"].append(entry)
+        except Exception as exc:
+            logging.exception("mongo unavailable for Strava import save")
+            raise HTTPException(status_code=503, detail=f"Could not save imported Strava activity: {exc}")
         existing_ids.add(strava_id)
         imported.append(entry)
     store["training"] = store["training"][-500:]
