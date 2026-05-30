@@ -1923,10 +1923,20 @@ async def training_delete(entry_id: str):
 @api_router.get("/strava/status")
 async def strava_status():
     token = await _read_strava_token()
+    linked = bool(token)
+    if token:
+        try:
+            await _strava_access_token()
+            token = await _read_strava_token()
+            linked = True
+        except Exception as exc:
+            logging.exception("Strava token validation failed")
+            await _record_strava_debug("status_token_invalid", {"error": str(exc)})
+            linked = False
     return {
         "configured": _strava_configured(),
-        "linked": bool(token),
-        "athlete": (_strava_token_preview(token) or {}).get("athlete") if token else None,
+        "linked": linked,
+        "athlete": (_strava_token_preview(token) or {}).get("athlete") if linked and token else None,
         "redirect_uri": STRAVA_REDIRECT_URI,
     }
 
@@ -2669,6 +2679,13 @@ async def _calendar_token_get():
         return _read_local_calendar_token()
 
 async def _calendar_token_save(doc):
+    existing = None
+    try:
+        existing = await db.google_tokens.find_one({"user_id": SINGLE_USER_ID}, {"_id": 0})
+    except Exception:
+        existing = _read_local_calendar_token()
+    if existing and not doc.get("refresh_token") and existing.get("refresh_token"):
+        doc["refresh_token"] = existing.get("refresh_token")
     saved_to_mongo = False
     try:
         await db.google_tokens.update_one(
@@ -2714,7 +2731,11 @@ async def _record_calendar_debug(event: str, detail: Optional[Dict[str, Any]] = 
 @api_router.get("/calendar/status")
 async def calendar_status():
     doc = await _calendar_token_get()
-    return {"linked": bool(doc and (doc.get("refresh_token") or doc.get("access_token"))), "email": (doc or {}).get("email")}
+    linked = bool(doc and (doc.get("refresh_token") or doc.get("access_token")))
+    if linked:
+        creds = await _get_creds()
+        linked = bool(creds)
+    return {"linked": linked, "email": (doc or {}).get("email")}
 
 @api_router.get("/calendar/debug")
 async def calendar_debug():
@@ -2810,6 +2831,7 @@ async def oauth_callback(code: Optional[str] = None, error: Optional[str] = None
         "access_token": token_resp.get("access_token"),
         "refresh_token": token_resp.get("refresh_token"),
         "expires_in": token_resp.get("expires_in"),
+        "expires_at": int(datetime.now(timezone.utc).timestamp()) + int(token_resp.get("expires_in") or 3600),
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
     await _calendar_token_save(save)
@@ -2840,7 +2862,10 @@ async def _get_creds():
     if not creds.valid and creds.refresh_token:
         try:
             creds.refresh(GoogleRequest())
-            await _calendar_token_update({"access_token": creds.token})
+            await _calendar_token_update({
+                "access_token": creds.token,
+                "expires_at": int(creds.expiry.timestamp()) if creds.expiry else None,
+            })
         except Exception:
             logging.exception("calendar refresh failed")
             return None
