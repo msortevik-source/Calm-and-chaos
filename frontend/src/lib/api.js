@@ -38,6 +38,8 @@ export const saveBudgetSetup = (payload) => api.put("/budget/v1/setup", payload)
 export const createSpending = (payload) => api.post("/budget/v1/spending", payload).then(r => r.data);
 export const markSpendingCheckin = (payload) => api.post("/budget/v1/checkin", payload).then(r => r.data);
 export const deleteSpending = (id) => api.delete(`/budget/v1/spending/${id}`).then(r => r.data);
+export const listBudgetArchives = () => api.get("/budget/v1/archives").then(r => r.data);
+export const archiveBudgetCycle = (payload) => api.post("/budget/v1/archive", payload).then(r => r.data);
 
 export const listLifeUpgrades = () => api.get("/life-upgrades").then(r => r.data);
 export const createLifeUpgrade = (payload) => api.post("/life-upgrades", payload).then(r => r.data);

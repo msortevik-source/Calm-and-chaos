@@ -195,6 +195,9 @@ class SpendingEntry(SpendingCreate):
 class SpendingCheckinCreate(BaseModel):
     date: Optional[str] = None
 
+class BudgetArchiveCreate(BaseModel):
+    cycle: Optional[str] = None
+
 class LifeUpgradeCreate(BaseModel):
     title: str
     category: str = "Someday"
@@ -1671,6 +1674,7 @@ async def debug_persistence():
         "training": db.training,
         "spending": db.spending_v1,
         "budget_setups": db.budget_setups_v1,
+        "budget_archives": db.budget_archives_v1,
         "food_plans": db.food_plans_v1,
         "life_upgrades": db.life_upgrades_v1,
         "chat_messages": db.chat_messages,
@@ -2218,6 +2222,56 @@ async def budget_v1_checkin(req: SpendingCheckinCreate):
     spending = await _spending_persistent(month, store)
     checkins = await _spending_checkins_persistent(month, store)
     return {"ok": True, "summary": _budget_summary(month, setup, spending, store={**store, "spending_checkins": checkins})}
+
+async def _budget_archive_doc(cycle_key: str, store: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    cycle_key = _budget_cycle_key(cycle_key)
+    cycle_info = _budget_cycle_bounds(cycle_key)
+    store = store or await _read_persistent_life_store()
+    setup = await _budget_setup_persistent(cycle_key, store)
+    spending = await _spending_persistent(cycle_key, store)
+    checkins = await _spending_checkins_persistent(cycle_key, store)
+    summary = _budget_summary(cycle_key, setup, spending, store={**store, "spending_checkins": checkins})
+    archived_at = datetime.now(timezone.utc).isoformat()
+    return {
+        "id": f"budget-cycle-{cycle_key}",
+        "cycle_key": cycle_key,
+        "cycle_name": cycle_info["label"],
+        "cycle": cycle_info,
+        "start_date": cycle_info["start_date"],
+        "end_date": cycle_info["end_date"],
+        "setup": setup,
+        "summary": summary,
+        "spending": sorted(spending, key=lambda x: x.get("date", ""), reverse=True),
+        "categories": summary.get("by_category", {}),
+        "checkins": checkins,
+        "archived": True,
+        "archived_at": archived_at,
+        "updated_at": archived_at,
+    }
+
+@api_router.get("/budget/v1/archives")
+async def budget_v1_archives(limit: int = 24):
+    try:
+        docs = await db.budget_archives_v1.find({}, {"_id": 0}).sort("start_date", -1).to_list(limit)
+    except Exception as exc:
+        logging.exception("mongo unavailable for budget archives read")
+        raise HTTPException(status_code=503, detail=f"Could not load budget archives: {exc}")
+    return {"archives": docs}
+
+@api_router.post("/budget/v1/archive")
+async def budget_v1_archive(req: BudgetArchiveCreate):
+    cycle_key = _budget_cycle_key(req.cycle)
+    doc = await _budget_archive_doc(cycle_key)
+    try:
+        await db.budget_archives_v1.update_one(
+            {"cycle_key": cycle_key},
+            {"$set": _json_safe_doc(doc)},
+            upsert=True,
+        )
+    except Exception as exc:
+        logging.exception("mongo unavailable for budget archive write")
+        raise HTTPException(status_code=503, detail=f"Could not archive budget cycle: {exc}")
+    return {"archive": doc}
 
 @api_router.delete("/budget/v1/spending/{entry_id}")
 async def budget_v1_spending_delete(entry_id: str):

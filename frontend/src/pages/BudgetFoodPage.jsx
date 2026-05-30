@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CalendarDays, Check, ListChecks, Plus, ShoppingBasket, Trash2, Utensils, Wallet } from "lucide-react";
+import { Archive, CalendarDays, Check, ListChecks, Plus, ShoppingBasket, Trash2, Utensils, Wallet } from "lucide-react";
 import { toast } from "sonner";
 import {
+  archiveBudgetCycle,
   createSpending,
   deleteSpending,
   getBudgetV1,
   getFoodV1,
+  listBudgetArchives,
   markSpendingCheckin,
   saveBudgetSetup,
   saveFoodV1,
@@ -44,6 +46,7 @@ function Stat({ label, value }) {
 function BudgetV1() {
   const [cycle, setCycle] = useState(cycleKeyForDate());
   const [data, setData] = useState(null);
+  const [archives, setArchives] = useState([]);
   const [setup, setSetup] = useState({ income: {}, fixed_expenses: {} });
   const [spend, setSpend] = useState({ date: todayIso(), category: "groceries" });
   const [busy, setBusy] = useState(false);
@@ -51,8 +54,9 @@ function BudgetV1() {
   const [newExpense, setNewExpense] = useState("");
 
   const load = useCallback(async () => {
-    const res = await getBudgetV1(cycle);
+    const [res, archiveRes] = await Promise.all([getBudgetV1(cycle), listBudgetArchives()]);
     setData(res);
+    setArchives(archiveRes.archives || []);
     setSetup(res.setup || { income: {}, fixed_expenses: {} });
   }, [cycle]);
 
@@ -107,7 +111,7 @@ function BudgetV1() {
   };
 
   const addSpending = async () => {
-    if (!spend.amount) { toast("Amount first. The number goblin demands one fact."); return; }
+    if (!spend.amount) { toast("Amount first. One number. Very rude, very necessary."); return; }
     setBusy(true);
     try {
       await createSpending({ ...spend, amount: Number(spend.amount) });
@@ -129,6 +133,27 @@ function BudgetV1() {
       toast("Noted. Zero-spend days still count as noticing.");
     } catch (e) {
       toast("Check-in did not save.", { description: e?.response?.data?.detail || e?.message || "No useful error returned." });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const archiveCurrentCycle = async () => {
+    setBusy(true);
+    try {
+      await saveBudgetSetup({
+        month: cycle,
+        income: setup.income,
+        income_notes: setup.income_notes || {},
+        fixed_expenses: setup.fixed_expenses,
+        fixed_notes: setup.fixed_notes || {},
+        fixed_active: setup.fixed_active || {},
+      });
+      await archiveBudgetCycle({ cycle });
+      await load();
+      toast("Cycle archived. Receipts are in the drawer.");
+    } catch (e) {
+      toast("Cycle did not archive.", { description: e?.response?.data?.detail || e?.message || "No useful error returned." });
     } finally {
       setBusy(false);
     }
@@ -196,6 +221,15 @@ function BudgetV1() {
           <div className="text-sm text-moss-100">{resetWindow}: new cycle, same labels, fresh amounts and logs.</div>
         </div>
         <div className="font-heading text-xl text-moss-50">{summary.checked_days || 0}/{summary.days_in_cycle || summary.days_in_month || 31} days checked in</div>
+      </div>
+      <div className="warm-card rounded-2xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-3">
+        <div>
+          <div className="text-[10px] uppercase tracking-[0.22em] text-moss-200/70">cycle archive</div>
+          <div className="text-sm text-moss-100">Save this cycle as a permanent budget record for later comparison.</div>
+        </div>
+        <button data-testid="budget-archive-current" disabled={busy} onClick={archiveCurrentCycle} className="pill-btn primary rounded-full px-5 py-2 text-xs inline-flex items-center gap-2">
+          <Archive size={13} /> Save / Archive Current Cycle
+        </button>
       </div>
 
       <div className="grid xl:grid-cols-[minmax(0,1.65fr)_minmax(320px,0.85fr)] gap-5 items-start">
@@ -320,6 +354,68 @@ function BudgetV1() {
             </button>
           </div>
         ))}
+      </div>
+
+      <div className="warm-card rounded-3xl p-5" data-testid="budget-cycle-archive">
+        <div className="flex items-center gap-2 mb-4">
+          <Archive size={16} className="text-amber" />
+          <h3 className="font-heading text-2xl text-moss-50">Budget Log</h3>
+        </div>
+        <div className="space-y-3">
+          {archives.length === 0 && (
+            <p className="text-sm text-moss-200 italic">No archived cycles yet. The drawer is empty, suspiciously innocent.</p>
+          )}
+          {archives.map((archive) => {
+            const archiveSummary = archive.summary || {};
+            const archiveCategories = archive.categories || archiveSummary.by_category || {};
+            const archiveSpending = archive.spending || [];
+            return (
+              <details key={archive.cycle_key || archive.id} className="rounded-2xl border border-moss-700/70 bg-moss-800/35 p-4">
+                <summary className="cursor-pointer list-none">
+                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+                    <div>
+                      <div className="font-heading text-xl text-moss-50">{archive.cycle_name || archiveSummary.cycle_label || archive.cycle_key}</div>
+                      <div className="text-xs text-moss-200">{archive.start_date} - {archive.end_date}</div>
+                    </div>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs text-moss-100">
+                      <span>Income <b className="text-amber">{money(archiveSummary.income_total)}</b></span>
+                      <span>Fixed <b className="text-amber">{money(archiveSummary.fixed_total)}</b></span>
+                      <span>Flexible <b className="text-amber">{money(archiveSummary.flexible_total)}</b></span>
+                      <span>Left <b className="text-amber">{money(archiveSummary.left_after_logged_spending)}</b></span>
+                    </div>
+                  </div>
+                </summary>
+                <div className="mt-4 grid lg:grid-cols-[0.8fr_1.2fr] gap-4">
+                  <div>
+                    <div className="text-xs uppercase tracking-[0.22em] text-moss-200/70 mb-2">categories</div>
+                    <div className="space-y-1">
+                      {Object.entries(archiveCategories).map(([cat, amount]) => (
+                        <div key={cat} className="flex items-center justify-between gap-3 text-sm text-moss-100">
+                          <span>{cat}</span>
+                          <span className="text-amber">{money(amount)}</span>
+                        </div>
+                      ))}
+                      {Object.keys(archiveCategories).length === 0 && <div className="text-sm text-moss-200 italic">No flexible spending logged.</div>}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-xs uppercase tracking-[0.22em] text-moss-200/70 mb-2">entries</div>
+                    <div className="max-h-72 overflow-auto space-y-1 pr-1">
+                      {archiveSpending.map((entry) => (
+                        <div key={entry.id} className="grid grid-cols-[82px_1fr_auto] gap-2 text-sm text-moss-100">
+                          <span className="text-amber">{entry.date}</span>
+                          <span className="truncate">{entry.category}{entry.note ? ` - ${entry.note}` : ""}</span>
+                          <span className="text-moss-50">{money(entry.amount, 2)}</span>
+                        </div>
+                      ))}
+                      {archiveSpending.length === 0 && <div className="text-sm text-moss-200 italic">No entries in this cycle.</div>}
+                    </div>
+                  </div>
+                </div>
+              </details>
+            );
+          })}
+        </div>
       </div>
     </section>
   );
