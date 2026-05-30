@@ -58,7 +58,32 @@ export default function ConversationPage() {
 
   const requestSummary = (type) => {
     const prompt = type === "weekly"
-      ? "Give me a weekly summary from the app data. Include training completed/missed, Strava runs, gym sessions, food consistency, budget/spending overview, calendar/recovery notes if useful, small pattern observations, and one practical adjustment for next week."
+      ? `Give me a weekly summary from the app data.
+
+Tone: calm, grounded, emotionally intelligent, observant, practical, and lightly funny if it fits.
+Do not sound like a disappointed accountant, fitness coach, productivity app, or report card.
+
+Important interpretation rules:
+- Never assume missing logs mean failure. Say "not logged" or "tracking may be incomplete."
+- Treat gaps as data quality or capacity signals, not moral problems.
+- Pattern observations should be curious, not judgmental.
+- Avoid shame, guilt loops, scolding, motivational-coach language, and dramatic conclusions.
+- Consider recovery, stress, social load, late shifts, sleep disruption, grief/low-capacity periods, and life admin if reflected in the app data.
+
+Include:
+1. Training / movement: completed or not logged, Strava runs, gym sessions, recovery context if visible.
+2. Food consistency: what looks stable, what looks friction-heavy.
+3. Budget/spending: cycle-aware spending overview, category patterns, and gentle observations.
+4. Calendar/planning/recovery notes if useful.
+5. The Real Story This Week: a compassionate synthesis of what the week actually looked like.
+6. One practical adjustment for next week.
+
+Preferred phrasing:
+- "No workouts logged this week (or tracking may be incomplete)."
+- "Looks like convenience/dopamine spending may have crept in. Worth noticing, not panicking."
+- "This may have been a recovery/capacity week rather than avoidance."
+
+Goal: pattern awareness and momentum, not perfection.`
       : "Give me a monthly summary from the app data. Include training sessions, running volume, long-run/easy-run trend, strength progression, budget income/fixed/flexible/category breakdown, food consistency, what quietly improved, main friction point, and one practical adjustment for next month.";
     submit(prompt, "send");
   };
