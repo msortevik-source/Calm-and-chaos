@@ -147,7 +147,7 @@ export default function TrainingPage() {
   const [exerciseLog, setExerciseLog] = useState({});
   const [runLog, setRunLog] = useState({});
   const [busy, setBusy] = useState(false);
-  const [strava, setStrava] = useState({ configured: true, linked: false });
+  const [strava, setStrava] = useState({ configured: true, linked: false, checked: false });
   const [stravaBusy, setStravaBusy] = useState(false);
   const [stravaImportNote, setStravaImportNote] = useState("");
 
@@ -175,7 +175,9 @@ export default function TrainingPage() {
 
     const s = await stravaStatus().catch(() => null);
     if (s) {
-      setStrava(s);
+      setStrava({ ...s, checked: true });
+    } else {
+      setStrava((prev) => ({ ...prev, checked: true }));
     }
   };
 
@@ -183,7 +185,7 @@ export default function TrainingPage() {
     const params = new URLSearchParams(window.location.search);
     let cleanUrl = false;
     if (params.get("strava") === "linked") {
-      setStrava((prev) => ({ ...prev, configured: true, linked: true }));
+      setStrava((prev) => ({ ...prev, configured: true, linked: true, checked: true }));
       toast("Strava linked. Tiny victory parade, very restrained.");
       cleanUrl = true;
     }
@@ -194,7 +196,7 @@ export default function TrainingPage() {
     if (params.get("strava_import") === "done") {
       const imported = params.get("imported") || "0";
       const skipped = params.get("skipped") || "0";
-      setStrava((prev) => ({ ...prev, configured: true, linked: true }));
+      setStrava((prev) => ({ ...prev, configured: true, linked: true, checked: true }));
       setStravaImportNote(`Imported ${imported}. Skipped ${skipped}.`);
       toast(`Imported ${imported} from Strava.`, {
         description: Number(imported) ? "Training log updated." : "Nothing new. Suspiciously calm.",
@@ -209,7 +211,7 @@ export default function TrainingPage() {
       setStravaImportNote(`Import failed: ${reason}`);
       toast("Couldn't import Strava activities.", { description: reason });
       if (reason.toLowerCase().includes("not linked")) {
-        setStrava((prev) => ({ ...prev, linked: false, athlete: null }));
+        setStrava((prev) => ({ ...prev, linked: false, athlete: null, checked: true }));
       }
       cleanUrl = true;
     }
@@ -337,7 +339,7 @@ export default function TrainingPage() {
     setStravaBusy(true);
     try {
       await stravaUnlink();
-      setStrava((prev) => ({ ...prev, linked: false, athlete: null }));
+      setStrava((prev) => ({ ...prev, linked: false, athlete: null, checked: true }));
       await load();
       toast("Strava unlinked.");
     } catch {
@@ -438,20 +440,27 @@ export default function TrainingPage() {
             <div className="text-xs uppercase tracking-[0.25em] text-moss-200/70 mb-2 flex items-center gap-2">
               <Activity size={14} /> Strava
             </div>
-            <h2 className="font-heading text-2xl text-moss-50">{strava.linked ? "Connected" : "Connect runs"}</h2>
+            <h2 className="font-heading text-2xl text-moss-50">{!strava.checked ? "Checking connection" : strava.linked ? "Connected" : "Connect runs"}</h2>
             <p className="text-sm text-moss-200 mt-1">
-              {strava.linked
+              {!strava.checked
+                ? "Asking the backend if Strava is already linked."
+                : strava.linked
                 ? `Linked${strava.athlete?.firstname ? ` as ${strava.athlete.firstname}` : ""}. Import recent activities when you want the log caught up.`
                 : "Pull recent activities into training without manually typing every kilometer like it is 2009."}
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            {!strava.linked && (
+            {!strava.checked && (
+              <button disabled className="pill-btn rounded-full px-5 py-2 text-xs inline-flex items-center gap-2 opacity-60">
+                <RefreshCw size={13} className="animate-spin" /> Checking
+              </button>
+            )}
+            {strava.checked && !strava.linked && (
               <button data-testid="strava-link" disabled={stravaBusy} onClick={linkStrava} className="pill-btn primary rounded-full px-5 py-2 text-xs inline-flex items-center gap-2 disabled:opacity-40">
                 <Link2 size={13} /> Link Strava
               </button>
             )}
-            {strava.linked && (
+            {strava.checked && strava.linked && (
               <>
                 <button data-testid="strava-import" disabled={stravaBusy} onClick={importStrava} className="pill-btn primary rounded-full px-5 py-2 text-xs inline-flex items-center gap-2 disabled:opacity-40">
                   <RefreshCw size={13} className={stravaBusy ? "animate-spin" : ""} /> {stravaBusy ? "Importing" : "Import recent"}

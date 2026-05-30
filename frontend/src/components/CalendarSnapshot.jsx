@@ -16,6 +16,7 @@ export default function CalendarSnapshot() {
   const [linked, setLinked] = useState(false);
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [checked, setChecked] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -29,17 +30,22 @@ export default function CalendarSnapshot() {
     } catch {
       setLinked(false);
       setEvents([]);
-    } finally { setLoading(false); }
+    } finally {
+      setChecked(true);
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get("calendar") === "linked") {
       setLinked(true);
+      setChecked(true);
       toast("Calendar linked.");
       window.history.replaceState({}, "", window.location.pathname);
     }
     if (params.get("calendar") === "error") {
+      setChecked(true);
       toast("Calendar link failed.", { description: params.get("reason") || "Google did not give a useful reason." });
       window.history.replaceState({}, "", window.location.pathname);
     }
@@ -64,7 +70,18 @@ export default function CalendarSnapshot() {
         )}
       </div>
 
-      {!linked && (
+      {!checked && (
+        <div className="space-y-3">
+          <p className="text-moss-200 font-body text-sm leading-relaxed">
+            Checking whether Calendar is already linked.
+          </p>
+          <button disabled className="pill-btn rounded-full px-4 py-1.5 text-xs inline-flex items-center gap-2 opacity-60">
+            <RefreshCw size={13} className="animate-spin" /> Checking
+          </button>
+        </div>
+      )}
+
+      {checked && !linked && (
         <div className="space-y-3">
           <p className="text-moss-200 font-body text-sm leading-relaxed">
             Link Google Calendar to include schedule context in planning and summaries. Optional, but useful.
@@ -75,13 +92,13 @@ export default function CalendarSnapshot() {
         </div>
       )}
 
-      {linked && events.length === 0 && !loading && (
+      {checked && linked && events.length === 0 && !loading && (
         <p className="text-moss-200 font-body text-sm italic" data-testid="calendar-empty">
           Nothing on the calendar. A quiet afternoon, apparently.
         </p>
       )}
 
-      {linked && events.length > 0 && (
+      {checked && linked && events.length > 0 && (
         <ul className="space-y-3" data-testid="calendar-events">
           {events.slice(0, 6).map(ev => (
             <li key={ev.id} className="flex items-start gap-3 group">
