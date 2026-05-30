@@ -320,15 +320,26 @@ function BudgetV1() {
       <div className="space-y-2" data-testid="spending-list">
         {groupedSpending.length > 0 && (
           <div className="warm-card rounded-3xl p-5 mb-4" data-testid="spending-category-overview">
-            <div className="text-xs uppercase tracking-[0.22em] text-moss-200/70 mb-4">cycle category overview</div>
-            <div className="grid md:grid-cols-2 gap-3">
+            <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-2 mb-4">
+              <div>
+                <div className="text-xs uppercase tracking-[0.22em] text-moss-200/70">cycle category overview</div>
+                <div className="text-sm text-moss-200 mt-1">Tap a category when you want the receipt pile. Otherwise it can sit quietly.</div>
+              </div>
+              <div className="font-heading text-xl text-amber">{money(summary.flexible_total)}</div>
+            </div>
+            <div className="space-y-2">
               {groupedSpending.map(([category, group]) => (
-                <div key={category} className="rounded-2xl border border-moss-700/70 bg-moss-800/35 p-4">
-                  <div className="flex items-center justify-between gap-3 mb-2">
-                    <div className="font-heading text-lg text-moss-50">{category}</div>
-                    <div className="text-amber font-heading">{money(group.total)}</div>
-                  </div>
-                  <div className="space-y-1">
+                <details key={category} className="rounded-2xl border border-moss-700/70 bg-moss-800/35 p-4">
+                  <summary className="cursor-pointer list-none">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <div className="font-heading text-lg text-moss-50">{category}</div>
+                        <div className="text-xs text-moss-200">{group.entries.length} entries</div>
+                      </div>
+                      <div className="text-amber font-heading">{money(group.total)}</div>
+                    </div>
+                  </summary>
+                  <div className="space-y-1 mt-3 border-t border-moss-700/60 pt-3">
                     {group.entries.map((entry) => (
                       <div key={entry.id} className="flex items-center justify-between gap-3 text-sm text-moss-100">
                         <span className="truncate">{entry.date}{entry.note ? ` - ${entry.note}` : ""}</span>
@@ -336,24 +347,39 @@ function BudgetV1() {
                       </div>
                     ))}
                   </div>
-                </div>
+                </details>
               ))}
             </div>
           </div>
         )}
-        {(data?.spending || []).slice(0, 12).map((entry) => (
-          <div key={entry.id} className="warm-card rounded-2xl p-4 flex items-center gap-3">
-            <div className="text-amber font-heading text-sm w-24 shrink-0">{entry.date}</div>
-            <div className="flex-1 min-w-0">
-              <div className="text-moss-50 text-sm">{entry.category}</div>
-              {entry.note && <div className="text-moss-200 text-xs italic">{entry.note}</div>}
+        {(data?.spending || []).length > 0 && (
+          <details className="warm-card rounded-2xl p-4">
+            <summary className="cursor-pointer list-none">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="font-heading text-lg text-moss-50">Recent entries</div>
+                  <div className="text-xs text-moss-200">Last {Math.min((data?.spending || []).length, 12)} logs</div>
+                </div>
+                <div className="text-xs uppercase tracking-[0.18em] text-amber">open</div>
+              </div>
+            </summary>
+            <div className="space-y-2 mt-3 border-t border-moss-700/60 pt-3">
+              {(data?.spending || []).slice(0, 12).map((entry) => (
+                <div key={entry.id} className="flex items-center gap-3">
+                  <div className="text-amber font-heading text-sm w-24 shrink-0">{entry.date}</div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-moss-50 text-sm">{entry.category}</div>
+                    {entry.note && <div className="text-moss-200 text-xs italic">{entry.note}</div>}
+                  </div>
+                  <div className="font-heading text-moss-50">{money(entry.amount, 2)}</div>
+                  <button data-testid={`spending-delete-${entry.id}`} onClick={async () => { await deleteSpending(entry.id); load(); }} className="text-moss-200/50 hover:text-amber">
+                    <Trash2 size={15} />
+                  </button>
+                </div>
+              ))}
             </div>
-            <div className="font-heading text-moss-50">{money(entry.amount, 2)}</div>
-            <button data-testid={`spending-delete-${entry.id}`} onClick={async () => { await deleteSpending(entry.id); load(); }} className="text-moss-200/50 hover:text-amber">
-              <Trash2 size={15} />
-            </button>
-          </div>
-        ))}
+          </details>
+        )}
       </div>
 
       <div className="warm-card rounded-3xl p-5" data-testid="budget-cycle-archive">
