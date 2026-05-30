@@ -13,7 +13,11 @@ import {
 } from "../lib/api";
 
 const todayIso = () => new Date().toISOString().slice(0, 10);
-const monthKey = () => todayIso().slice(0, 7);
+const cycleKeyForDate = (iso = todayIso()) => {
+  const date = new Date(`${iso}T12:00:00`);
+  if (date.getDate() < 12) date.setMonth(date.getMonth() - 1);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+};
 const inputCls = "bg-moss-800/60 border border-moss-700 rounded-xl px-3 py-2 text-sm text-moss-50 placeholder-moss-200/50 outline-none focus:border-amber/50 transition-colors";
 const FALLBACK_SPENDING_CATEGORIES = ["groceries", "snus", "Monster / energy drink", "candy / snacks", "takeaway", "coffee", "transport", "random nonsense", "other"];
 const FALLBACK_LUNCH_OPTIONS = ["chicken pasta salad", "rice bowls", "wraps", "soup + sandwich", "pasta bake"];
@@ -38,7 +42,7 @@ function Stat({ label, value }) {
 }
 
 function BudgetV1() {
-  const [month, setMonth] = useState(monthKey());
+  const [cycle, setCycle] = useState(cycleKeyForDate());
   const [data, setData] = useState(null);
   const [setup, setSetup] = useState({ income: {}, fixed_expenses: {} });
   const [spend, setSpend] = useState({ date: todayIso(), category: "groceries" });
@@ -47,10 +51,10 @@ function BudgetV1() {
   const [newExpense, setNewExpense] = useState("");
 
   const load = useCallback(async () => {
-    const res = await getBudgetV1(month);
+    const res = await getBudgetV1(cycle);
     setData(res);
     setSetup(res.setup || { income: {}, fixed_expenses: {} });
-  }, [month]);
+  }, [cycle]);
 
   useEffect(() => { load().catch(() => toast("Budget is being dramatic.")); }, [load]);
 
@@ -86,7 +90,7 @@ function BudgetV1() {
     setBusy(true);
     try {
       await saveBudgetSetup({
-        month,
+        month: cycle,
         income: setup.income,
         income_notes: setup.income_notes || {},
         fixed_expenses: setup.fixed_expenses,
@@ -94,9 +98,9 @@ function BudgetV1() {
         fixed_active: setup.fixed_active || {},
       });
       await load();
-      toast("Month saved. Future you gets a chair.");
+      toast("Cycle saved. Future you gets a chair.");
     } catch (e) {
-      toast("Month did not save.", { description: e?.response?.data?.detail || e?.message || "No useful error returned." });
+      toast("Cycle did not save.", { description: e?.response?.data?.detail || e?.message || "No useful error returned." });
     } finally {
       setBusy(false);
     }
@@ -131,6 +135,7 @@ function BudgetV1() {
   };
 
   const summary = data?.summary || {};
+  const cycleInfo = data?.cycle || summary.cycle || {};
   const spendingCategories = data?.categories?.length ? data.categories : FALLBACK_SPENDING_CATEGORIES;
   const groupedSpending = useMemo(() => {
     const groups = {};
@@ -147,7 +152,7 @@ function BudgetV1() {
   const fixedActive = setup.fixed_active || summary.fixed_active || {};
   const incomeNotes = setup.income_notes || {};
   const fixedNotes = setup.fixed_notes || {};
-  const resetWindow = "11th/12th-ish";
+  const resetWindow = "12th to 11th";
 
   return (
     <section className="space-y-6" data-testid="budget-v1">
@@ -159,13 +164,15 @@ function BudgetV1() {
           <h2 className="font-heading text-3xl text-moss-50">Where does it go?</h2>
         </div>
         <div className="flex flex-col items-start md:items-end gap-2">
-          <input data-testid="budget-month" type="month" value={month} onChange={(e) => setMonth(e.target.value)} className={inputCls + " w-44"} />
+          <input data-testid="budget-month" type="month" value={cycle} onChange={(e) => setCycle(e.target.value)} className={inputCls + " w-44"} />
+          <div className="text-xs text-moss-200">Cycle: {cycleInfo.label || "12th - 11th"}</div>
           <div className="text-[10px] text-moss-200/50">{BUILD_MARKER}</div>
         </div>
       </div>
 
       <div className="warm-card rounded-2xl p-4" data-testid="monthly-snapshot">
-        <div className="text-xs uppercase tracking-[0.22em] text-moss-200/70 mb-2">monthly snapshot</div>
+        <div className="text-xs uppercase tracking-[0.22em] text-moss-200/70 mb-2">budget cycle overview</div>
+        <div className="font-heading text-xl text-moss-50 mb-2">{cycleInfo.label || summary.cycle_label || "Current salary cycle"}</div>
         <div className="text-sm md:text-base text-moss-50 leading-relaxed">
           Income: <span className="text-amber">{money(summary.income_total)}</span>
           <span className="text-moss-200"> | </span>
@@ -185,15 +192,15 @@ function BudgetV1() {
       </div>
       <div className="warm-card rounded-2xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-2">
         <div>
-          <div className="text-[10px] uppercase tracking-[0.22em] text-moss-200/70">monthly reset</div>
-          <div className="text-sm text-moss-100">Around the {resetWindow}: snapshot, archive, keep recurring expenses.</div>
+          <div className="text-[10px] uppercase tracking-[0.22em] text-moss-200/70">cycle reset</div>
+          <div className="text-sm text-moss-100">{resetWindow}: new cycle, same labels, fresh amounts and logs.</div>
         </div>
-        <div className="font-heading text-xl text-moss-50">{summary.checked_days || 0}/{summary.days_in_month || 30} days checked in</div>
+        <div className="font-heading text-xl text-moss-50">{summary.checked_days || 0}/{summary.days_in_cycle || summary.days_in_month || 31} days checked in</div>
       </div>
 
       <div className="grid xl:grid-cols-[minmax(0,1.65fr)_minmax(320px,0.85fr)] gap-5 items-start">
         <div className="warm-card rounded-3xl p-5">
-          <h3 className="font-heading text-xl text-moss-50 mb-4">Monthly inputs</h3>
+          <h3 className="font-heading text-xl text-moss-50 mb-4">Cycle inputs</h3>
           <div className="grid xl:grid-cols-2 gap-5">
             <div>
               <div className="text-xs uppercase tracking-[0.22em] text-moss-200/70 mb-3">income</div>
@@ -230,7 +237,7 @@ function BudgetV1() {
             </div>
           </div>
           <button data-testid="budget-setup-save" disabled={busy} onClick={saveSetup} className="pill-btn primary rounded-full px-5 py-2 text-xs mt-5">
-            Save month
+            Save cycle
           </button>
         </div>
 
@@ -279,7 +286,7 @@ function BudgetV1() {
       <div className="space-y-2" data-testid="spending-list">
         {groupedSpending.length > 0 && (
           <div className="warm-card rounded-3xl p-5 mb-4" data-testid="spending-category-overview">
-            <div className="text-xs uppercase tracking-[0.22em] text-moss-200/70 mb-4">monthly category overview</div>
+            <div className="text-xs uppercase tracking-[0.22em] text-moss-200/70 mb-4">cycle category overview</div>
             <div className="grid md:grid-cols-2 gap-3">
               {groupedSpending.map(([category, group]) => (
                 <div key={category} className="rounded-2xl border border-moss-700/70 bg-moss-800/35 p-4">

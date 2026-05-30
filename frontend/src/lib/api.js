@@ -33,7 +33,7 @@ export const stravaUnlink = () => api.post("/strava/unlink").then(r => r.data);
 export const listBudget = () => api.get("/budget").then(r => r.data);
 export const createBudget = (payload) => api.post("/budget", payload).then(r => r.data);
 export const deleteBudget = (id) => api.delete(`/budget/${id}`).then(r => r.data);
-export const getBudgetV1 = (month) => api.get(`/budget/v1${month ? `?month=${month}` : ""}`).then(r => r.data);
+export const getBudgetV1 = (cycle) => api.get(`/budget/v1${cycle ? `?cycle=${cycle}` : ""}`).then(r => r.data);
 export const saveBudgetSetup = (payload) => api.put("/budget/v1/setup", payload).then(r => r.data);
 export const createSpending = (payload) => api.post("/budget/v1/spending", payload).then(r => r.data);
 export const markSpendingCheckin = (payload) => api.post("/budget/v1/checkin", payload).then(r => r.data);

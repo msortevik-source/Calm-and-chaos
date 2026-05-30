@@ -309,7 +309,49 @@ DINNER_TEMPLATES = {
 }
 
 def _month_key(value: Optional[str] = None) -> str:
-    return value or datetime.now(timezone.utc).strftime("%Y-%m")
+    return _budget_cycle_key(value)
+
+def _budget_cycle_key(value: Optional[str] = None) -> str:
+    if value:
+        raw = str(value)
+        if len(raw) >= 10:
+            day = date_cls.fromisoformat(raw[:10])
+        else:
+            year, month_num = [int(p) for p in raw[:7].split("-")]
+            day = date_cls(year, month_num, 12)
+    else:
+        day = _now_oslo().date()
+    year = day.year
+    month_num = day.month
+    if day.day < 12:
+        if month_num == 1:
+            year -= 1
+            month_num = 12
+        else:
+            month_num -= 1
+    return f"{year}-{month_num:02d}"
+
+def _budget_cycle_bounds(cycle_key: str) -> Dict[str, str]:
+    year, month_num = [int(p) for p in cycle_key.split("-")]
+    start = date_cls(year, month_num, 12)
+    if month_num == 12:
+        end = date_cls(year + 1, 1, 11)
+    else:
+        end = date_cls(year, month_num + 1, 11)
+    return {
+        "key": cycle_key,
+        "start_date": start.isoformat(),
+        "end_date": end.isoformat(),
+        "label": f"{start.strftime('%d %b')} - {end.strftime('%d %b')}",
+        "days": (end - start).days + 1,
+    }
+
+def _date_in_budget_cycle(date_value: Optional[str], cycle_key: str) -> bool:
+    if not date_value:
+        return False
+    bounds = _budget_cycle_bounds(cycle_key)
+    day = str(date_value)[:10]
+    return bounds["start_date"] <= day <= bounds["end_date"]
 
 def _week_start(value: Optional[str] = None) -> str:
     if value:
@@ -450,13 +492,14 @@ def _normalize_spending_category(category: str) -> str:
     return "other"
 
 def _budget_summary(month: str, setup: Dict[str, Any], spending: List[Dict[str, Any]], store: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    cycle = _budget_cycle_bounds(month)
     income = _money_dict({**DEFAULT_INCOME, **setup.get("income", {})})
     fixed_all = _money_dict({**DEFAULT_FIXED_EXPENSES, **setup.get("fixed_expenses", {})})
     fixed_active = {key: bool(value) for key, value in setup.get("fixed_active", {}).items()}
     for key in fixed_all:
         fixed_active.setdefault(key, True)
     fixed = {key: value for key, value in fixed_all.items() if fixed_active.get(key, True)}
-    month_spending = [s for s in spending if (s.get("date") or "").startswith(month)]
+    month_spending = [s for s in spending if _date_in_budget_cycle(s.get("date"), month)]
     by_category: Dict[str, float] = {}
     for entry in month_spending:
         cat = _normalize_spending_category(entry.get("category") or "other")
@@ -465,7 +508,7 @@ def _budget_summary(month: str, setup: Dict[str, Any], spending: List[Dict[str, 
     checked_dates = {s.get("date") for s in month_spending if s.get("date")}
     checked_dates.update(
         c.get("date") for c in store.get("spending_checkins", [])
-        if (c.get("date") or "").startswith(month)
+        if _date_in_budget_cycle(c.get("date"), month)
     )
     checked_days = len([d for d in checked_dates if d])
     flexible_total = round(sum(by_category.values()), 2)
@@ -477,10 +520,15 @@ def _budget_summary(month: str, setup: Dict[str, Any], spending: List[Dict[str, 
     if monster_total > 0:
         observations.append("Monster spending has entered the chat. Not judging. Noting.")
     if chaos_total > by_category.get("groceries", 0) and chaos_total > 0:
-        observations.append("Random chaos purchases are louder than groceries this month. Suspicious little category.")
+        observations.append("Random chaos purchases are louder than groceries this cycle. Suspicious little category.")
     if checked_days >= 3:
-        observations.append(f"Days checked in this month: {checked_days}/{_days_in_month(month)}. Noticing is the win.")
+        observations.append(f"Days checked in this cycle: {checked_days}/{cycle['days']}. Noticing is the win.")
     return {
+        "cycle": cycle,
+        "cycle_key": month,
+        "cycle_start": cycle["start_date"],
+        "cycle_end": cycle["end_date"],
+        "cycle_label": cycle["label"],
         "income": income,
         "fixed_expenses": fixed_all,
         "fixed_active": fixed_active,
@@ -493,7 +541,8 @@ def _budget_summary(month: str, setup: Dict[str, Any], spending: List[Dict[str, 
         "by_category": {k: round(v, 2) for k, v in by_category.items()},
         "checked_days": checked_days,
         "checked_dates": sorted([d for d in checked_dates if d]),
-        "days_in_month": _days_in_month(month),
+        "days_in_month": cycle["days"],
+        "days_in_cycle": cycle["days"],
         "observations": observations,
     }
 
@@ -526,27 +575,35 @@ async def _budget_setup_persistent(month: str, store: Dict[str, Any]) -> Dict[st
 async def _spending_persistent(month: Optional[str] = None, store: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
     store = store or _read_life_store()
     mongo_docs = []
-    query = {"date": {"$regex": f"^{month}"}} if month else {}
+    if month:
+        cycle = _budget_cycle_bounds(month)
+        query = {"date": {"$gte": cycle["start_date"], "$lte": cycle["end_date"]}}
+    else:
+        query = {}
     try:
         mongo_docs = await db.spending_v1.find(query, {"_id": 0}).sort("timestamp", -1).to_list(1000)
     except Exception:
         logging.exception("mongo unavailable for spending read")
     local_docs = store.get("spending", [])
     if month:
-        local_docs = [s for s in local_docs if (s.get("date") or "").startswith(month)]
+        local_docs = [s for s in local_docs if _date_in_budget_cycle(s.get("date"), month)]
     return sorted(_merge_docs_by_id(mongo_docs, local_docs), key=lambda x: x.get("timestamp") or x.get("date") or "", reverse=True)
 
 async def _spending_checkins_persistent(month: Optional[str] = None, store: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
     store = store or _read_life_store()
     mongo_docs = []
-    query = {"date": {"$regex": f"^{month}"}} if month else {}
+    if month:
+        cycle = _budget_cycle_bounds(month)
+        query = {"date": {"$gte": cycle["start_date"], "$lte": cycle["end_date"]}}
+    else:
+        query = {}
     try:
         mongo_docs = await db.spending_checkins_v1.find(query, {"_id": 0}).sort("timestamp", -1).to_list(1000)
     except Exception:
         logging.exception("mongo unavailable for spending checkin read")
     local_docs = store.get("spending_checkins", [])
     if month:
-        local_docs = [s for s in local_docs if (s.get("date") or "").startswith(month)]
+        local_docs = [s for s in local_docs if _date_in_budget_cycle(s.get("date"), month)]
     return _merge_docs_by_id(mongo_docs, local_docs)
 
 def _food_plan(req: FoodPlanCreate) -> Dict[str, Any]:
@@ -1056,7 +1113,8 @@ def _summarise_life_store_for_context(text: str, wants_budget=False, wants_meals
     store = _read_life_store()
     lines = []
     target_date, date_label = _date_filter_for_text(text)
-    month = datetime.now(timezone.utc).strftime("%Y-%m")
+    month = _budget_cycle_key()
+    cycle = _budget_cycle_bounds(month)
     setup = store.get("budget_setups", {}).get(month)
 
     if wants_budget or wants_broad:
@@ -1064,9 +1122,9 @@ def _summarise_life_store_for_context(text: str, wants_budget=False, wants_meals
         if target_date:
             spending = [s for s in spending if s.get("date") == target_date]
         else:
-            spending = [s for s in spending if (s.get("date") or "").startswith(month)]
+            spending = [s for s in spending if _date_in_budget_cycle(s.get("date"), month)]
         if spending:
-            lines.append(f"FOOD & BUDGET V1 SPENDING ({date_label or month}):")
+            lines.append(f"FOOD & BUDGET V1 SPENDING ({date_label or cycle['label']}):")
             total = 0.0
             by_cat: Dict[str, float] = {}
             for s in sorted(spending, key=lambda x: x.get("date", ""), reverse=True)[:20]:
@@ -1081,9 +1139,9 @@ def _summarise_life_store_for_context(text: str, wants_budget=False, wants_meals
         if setup:
             summary = _budget_summary(month, setup, store.get("spending", []))
             lines.append(
-                f"FOOD & BUDGET V1 MONTH SNAPSHOT ({month}): income {summary['income_total']:.2f} kr, "
+                f"FOOD & BUDGET V1 CYCLE SNAPSHOT ({cycle['label']}): income {summary['income_total']:.2f} kr, "
                 f"fixed {summary['fixed_total']:.2f} kr, flexible logged {summary['flexible_total']:.2f} kr, "
-                f"checked in {summary['checked_days']}/{summary['days_in_month']} days."
+                f"checked in {summary['checked_days']}/{summary['days_in_cycle']} days."
             )
 
     if wants_meals or wants_broad:
@@ -1128,14 +1186,14 @@ def _summarise_life_store_for_context(text: str, wants_budget=False, wants_meals
 
 def _compact_life_store_snapshot():
     store = _read_life_store()
-    month = datetime.now(timezone.utc).strftime("%Y-%m")
+    month = _budget_cycle_key()
     lines = []
     setup = store.get("budget_setups", {}).get(month)
-    spending = [s for s in store.get("spending", []) if (s.get("date") or "").startswith(month)]
+    spending = [s for s in store.get("spending", []) if _date_in_budget_cycle(s.get("date"), month)]
     if setup or spending:
         summary = _budget_summary(month, setup or {"income": {}, "fixed_expenses": {}}, store.get("spending", []))
         lines.append(
-            f"BUDGET V1 SNAPSHOT: {summary['checked_days']}/{summary['days_in_month']} days checked in; "
+            f"BUDGET V1 SNAPSHOT: {summary['cycle_label']}; {summary['checked_days']}/{summary['days_in_cycle']} days checked in; "
             f"flexible logged {summary['flexible_total']:.2f} kr; categories are in NOK {summary['by_category']}."
         )
     plans = store.get("food_plans", {})
@@ -1379,12 +1437,12 @@ def _context_date_for_text(text: str):
 
 def _budget_router_context(text: str, store: Optional[Dict[str, Any]] = None) -> str:
     store = store or _read_life_store()
-    month = _now_oslo().strftime("%Y-%m")
+    month = _budget_cycle_key()
     setup = store.get("budget_setups", {}).get(month) or {"income": DEFAULT_INCOME, "fixed_expenses": DEFAULT_FIXED_EXPENSES}
     summary = _budget_summary(month, setup, store.get("spending", []))
     target_date, date_label = _context_date_for_text(text)
     category_hint = _spending_category_hint(text)
-    spending = [s for s in store.get("spending", []) if (s.get("date") or "").startswith(month)]
+    spending = [s for s in store.get("spending", []) if _date_in_budget_cycle(s.get("date"), month)]
     if target_date:
         spending = [s for s in spending if s.get("date") == target_date]
     if category_hint:
@@ -1392,11 +1450,11 @@ def _budget_router_context(text: str, store: Optional[Dict[str, Any]] = None) ->
 
     lines = [
         "budget:",
-        f"- current month: income {_kr(summary['income_total'])}, fixed {_kr(summary['fixed_total'])}, flexible logged {_kr(summary['flexible_total'])}",
-        f"- days checked in this month: {summary['checked_days']}/{summary['days_in_month']}",
+        f"- current budget cycle ({summary['cycle_label']}): income {_kr(summary['income_total'])}, fixed {_kr(summary['fixed_total'])}, flexible logged {_kr(summary['flexible_total'])}",
+        f"- days checked in this cycle: {summary['checked_days']}/{summary['days_in_cycle']}",
     ]
     if category_hint or target_date:
-        label = f"{category_hint or 'spending'} {date_label or 'this month'}"
+        label = f"{category_hint or 'spending'} {date_label or 'this cycle'}"
         total = sum(float(s.get("amount") or 0) for s in spending)
         lines.append(f"- requested slice: {label} = {_kr(total)}")
     if summary.get("by_category"):
@@ -2058,8 +2116,9 @@ async def budget_delete(entry_id: str):
     return {"ok": True}
 
 @api_router.get("/budget/v1")
-async def budget_v1(month: Optional[str] = None):
-    month = _month_key(month)
+async def budget_v1(month: Optional[str] = None, cycle: Optional[str] = None):
+    month = _budget_cycle_key(cycle or month)
+    cycle_info = _budget_cycle_bounds(month)
     store = await _read_persistent_life_store()
     setup = await _budget_setup_persistent(month, store)
     spending = await _spending_persistent(month, store)
@@ -2068,6 +2127,8 @@ async def budget_v1(month: Optional[str] = None):
     summary = _budget_summary(month, setup, spending, store=summary_store)
     return {
         "month": month,
+        "cycle": cycle_info,
+        "cycle_key": month,
         "setup": setup,
         "spending": sorted(spending, key=lambda x: x.get("date", ""), reverse=True),
         "summary": summary,
@@ -2076,10 +2137,13 @@ async def budget_v1(month: Optional[str] = None):
 
 @api_router.put("/budget/v1/setup")
 async def budget_v1_setup(req: BudgetSetup):
-    month = _month_key(req.month)
+    month = _budget_cycle_key(req.month)
+    cycle_info = _budget_cycle_bounds(month)
     store = await _read_persistent_life_store()
     setup = {
         "month": month,
+        "cycle": cycle_info,
+        "cycle_key": month,
         "income": _money_dict({**DEFAULT_INCOME, **req.income}),
         "income_notes": {key: str(value or "") for key, value in req.income_notes.items()},
         "fixed_expenses": _money_dict({**DEFAULT_FIXED_EXPENSES, **req.fixed_expenses}),
@@ -2099,7 +2163,7 @@ async def budget_v1_setup(req: BudgetSetup):
     await _write_persistent_life_store(store)
     spending = await _spending_persistent(month, store)
     checkins = await _spending_checkins_persistent(month, store)
-    return {"setup": setup, "summary": _budget_summary(month, setup, spending, store={**store, "spending_checkins": checkins})}
+    return {"setup": setup, "cycle": cycle_info, "summary": _budget_summary(month, setup, spending, store={**store, "spending_checkins": checkins})}
 
 @api_router.post("/budget/v1/spending", response_model=SpendingEntry)
 async def budget_v1_spending(req: SpendingCreate):
@@ -2111,6 +2175,7 @@ async def budget_v1_spending(req: SpendingCreate):
     entry.category = _normalize_spending_category(entry.category)
     doc = entry.model_dump()
     doc["timestamp"] = doc["timestamp"].isoformat()
+    doc["cycle_key"] = _budget_cycle_key(entry.date)
     try:
         await db.spending_v1.insert_one(doc)
     except Exception as exc:
@@ -2120,7 +2185,7 @@ async def budget_v1_spending(req: SpendingCreate):
     store["spending"].append(doc)
     store.setdefault("spending_checkins", [])
     if entry.date not in {c.get("date") for c in store["spending_checkins"]}:
-        checkin = {"id": str(uuid.uuid4()), "date": entry.date, "timestamp": doc["timestamp"]}
+        checkin = {"id": str(uuid.uuid4()), "date": entry.date, "cycle_key": doc["cycle_key"], "timestamp": doc["timestamp"]}
         try:
             await db.spending_checkins_v1.update_one({"date": entry.date}, {"$set": checkin}, upsert=True)
         except Exception:
@@ -2138,6 +2203,7 @@ async def budget_v1_checkin(req: SpendingCheckinCreate):
         checkin = {
             "id": str(uuid.uuid4()),
             "date": entry_date,
+            "cycle_key": _budget_cycle_key(entry_date),
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
         try:
@@ -2147,7 +2213,7 @@ async def budget_v1_checkin(req: SpendingCheckinCreate):
             raise HTTPException(status_code=503, detail=f"Could not save spending check-in: {exc}")
         store["spending_checkins"].append(checkin)
         await _write_persistent_life_store(store)
-    month = _month_key(entry_date[:7])
+    month = _budget_cycle_key(entry_date)
     setup = await _budget_setup_persistent(month, store)
     spending = await _spending_persistent(month, store)
     checkins = await _spending_checkins_persistent(month, store)
