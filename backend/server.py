@@ -54,8 +54,6 @@ if "mongodb+srv://" in mongo_url or "mongodb.net" in mongo_url:
         "tlsCAFile": certifi.where(),
         "tlsDisableOCSPEndpointCheck": True,
     })
-    if os.environ.get("MONGO_TLS_ALLOW_INVALID", "true").lower() in ("1", "true", "yes"):
-        mongo_kwargs["tlsAllowInvalidCertificates"] = True
 client = AsyncIOMotorClient(mongo_url, **mongo_kwargs)
 db = client[os.environ['DB_NAME']]
 
