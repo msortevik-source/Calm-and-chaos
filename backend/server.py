@@ -316,6 +316,69 @@ PROTEIN_ALIASES = {
     "cheap week": "eggs",
     "cheap goblin week": "eggs",
 }
+LUNCH_STYLE_OPTIONS = ["protein lunch bowls", "rice bowls", "wraps", "pasta salad", "egg/potato plates"]
+LUNCH_STYLE_ALIASES = {
+    "chicken pasta salad": "pasta salad",
+    "pasta bake": "pasta salad",
+    "soup + sandwich": "protein lunch bowls",
+}
+LUNCH_STYLE_TEMPLATES = {
+    "rice bowls": {
+        "chicken": "chicken rice bowl with cucumber, spinach, avocado, and yoghurt dressing",
+        "salmon": "salmon rice bowl with spinach, cucumber, and yoghurt dressing",
+        "minced meat": "minced meat rice bowl with carrots, cucumber, and salad",
+        "pork": "pork rice bowl with frozen veg and cucumber",
+        "eggs": "egg + avocado rice bowl with cucumber",
+        "yoghurt/kesam/skyr": "skyr bowl with oats, banana, berries, and cottage cheese",
+        "cottage cheese": "cottage cheese rice bowl/toast plate with cucumber and eggs",
+        "leftovers": "leftovers rice bowl with cucumber and yoghurt dressing",
+        "shopping": ["rice", "cucumber", "spinach", "avocado", "yoghurt dressing"],
+    },
+    "wraps": {
+        "chicken": "chicken wrap with salad, carrots, and yoghurt dressing",
+        "salmon": "salmon wrap with cucumber, spinach, and avocado",
+        "minced meat": "taco mince wrap with salad and cucumber",
+        "pork": "pork wrap with cucumber and salad",
+        "eggs": "egg + avocado wrap with spinach",
+        "yoghurt/kesam/skyr": "protein yoghurt/skyr bowl as low-friction lunch backup",
+        "cottage cheese": "cottage cheese + egg wrap with cucumber",
+        "leftovers": "leftovers wrap with salad and whatever is still behaving",
+        "shopping": ["bread/wraps", "salad", "cucumber", "carrots", "avocado"],
+    },
+    "pasta salad": {
+        "chicken": "chicken pesto pasta salad with cucumber and spinach",
+        "salmon": "salmon pasta salad with cucumber, spinach, and yoghurt dressing",
+        "minced meat": "minced meat pasta salad bowl with carrots and salad",
+        "pork": "pork pasta salad with cucumber and frozen veg",
+        "eggs": "egg + avocado pasta salad with spinach",
+        "yoghurt/kesam/skyr": "high-protein pasta salad with kesam/yoghurt dressing",
+        "cottage cheese": "cottage cheese pasta salad with cucumber and spinach",
+        "leftovers": "leftover protein pasta salad with yoghurt dressing",
+        "shopping": ["pasta", "pesto/yoghurt dressing", "cucumber", "spinach", "avocado"],
+    },
+    "egg/potato plates": {
+        "chicken": "chicken, potatoes, cucumber, and yoghurt dressing plate",
+        "salmon": "salmon, eggs, potatoes, cucumber, and avocado",
+        "minced meat": "minced meat potato bowl with carrots and salad",
+        "pork": "pork, potatoes, cucumber, and frozen veg",
+        "eggs": "egg, potato, avocado, and cucumber plate",
+        "yoghurt/kesam/skyr": "skyr/kesam bowl plus eggs or toast on the side",
+        "cottage cheese": "cottage cheese, eggs, potatoes, and cucumber",
+        "leftovers": "leftovers potato plate with cucumber and yoghurt dressing",
+        "shopping": ["potatoes", "eggs", "cucumber", "avocado", "yoghurt/kesam"],
+    },
+    "protein lunch bowls": {
+        "chicken": "chicken lunch bowl with rice/potatoes, cucumber, and spinach",
+        "salmon": "salmon lunch bowl with potatoes/rice, cucumber, and avocado",
+        "minced meat": "minced meat lunch bowl with rice, carrots, and salad",
+        "pork": "pork lunch bowl with rice/potatoes and frozen veg",
+        "eggs": "egg lunch bowl with potatoes, avocado, and cucumber",
+        "yoghurt/kesam/skyr": "skyr/yoghurt bowl with oats, banana, berries, and cottage cheese",
+        "cottage cheese": "cottage cheese bowl/toast plate with eggs and cucumber",
+        "leftovers": "leftovers lunch bowl with cucumber and yoghurt dressing",
+        "shopping": ["rice", "potatoes", "cucumber", "spinach", "avocado"],
+    },
+}
 MEAL_TEMPLATES = {
     "chicken": {
         "lunch": ["chicken rice bowl with cucumber, spinach, avocado", "chicken pasta salad with yoghurt dressing", "chicken wraps with salad and carrots"],
@@ -406,6 +469,31 @@ def _date_in_budget_cycle(date_value: Optional[str], cycle_key: str) -> bool:
     bounds = _budget_cycle_bounds(cycle_key)
     day = str(date_value)[:10]
     return bounds["start_date"] <= day <= bounds["end_date"]
+
+def _lunch_style_key(value: Optional[str]) -> str:
+    raw = (value or "protein lunch bowls").strip().lower()
+    normalized = LUNCH_STYLE_ALIASES.get(raw, raw)
+    if normalized in LUNCH_STYLE_OPTIONS:
+        return normalized
+    return "protein lunch bowls"
+
+def _lunch_pool_for_style(style: str, proteins: List[str]) -> List[str]:
+    templates = LUNCH_STYLE_TEMPLATES.get(style, LUNCH_STYLE_TEMPLATES["protein lunch bowls"])
+    pool = []
+    for protein in proteins:
+        meal = templates.get(protein)
+        if meal and meal not in pool:
+            pool.append(meal)
+    leftover = templates.get("leftovers")
+    if leftover and leftover not in pool:
+        pool.append(leftover)
+    if len(pool) < 3:
+        for fallback in LUNCH_STYLE_TEMPLATES["protein lunch bowls"].values():
+            if isinstance(fallback, str) and fallback not in pool:
+                pool.append(fallback)
+            if len(pool) >= 3:
+                break
+    return pool
 
 def _week_start(value: Optional[str] = None) -> str:
     if value:
@@ -672,16 +760,14 @@ def _food_plan(req: FoodPlanCreate) -> Dict[str, Any]:
     if not proteins:
         proteins = ["chicken", "salmon", "eggs"]
     proteins = proteins[:5]
-    lunch_pool = []
+    lunch_style = _lunch_style_key(req.lunch_week)
+    lunch_pool = _lunch_pool_for_style(lunch_style, proteins)
     dinner_pool = []
     shopping_proteins = []
     for protein in proteins:
         template = MEAL_TEMPLATES.get(protein, {})
-        lunch_pool.extend(template.get("lunch", []))
         dinner_pool.extend(template.get("dinner", []))
         shopping_proteins.extend(template.get("shopping", []))
-    if not lunch_pool:
-        lunch_pool = ["protein lunch bowl with rice/potatoes, cucumber, spinach, and yoghurt dressing"]
     if not dinner_pool:
         dinner_pool = ["simple protein dinner with potatoes/rice and vegetables"]
     days = []
@@ -711,6 +797,7 @@ def _food_plan(req: FoodPlanCreate) -> Dict[str, Any]:
         "banana",
         "berries/fruit",
         *shopping_proteins,
+        *LUNCH_STYLE_TEMPLATES.get(lunch_style, {}).get("shopping", []),
         *CARB_STAPLES,
         *VEG_STAPLES,
         "avocado",
@@ -725,7 +812,9 @@ def _food_plan(req: FoodPlanCreate) -> Dict[str, Any]:
     estimate += max(0, len(proteins) - 2) * 120
     return {
         "week_start": week_start,
-        "inputs": {**req.model_dump(), "protein_weeks": proteins, "protein_week": proteins[0]},
+        "inputs": {**req.model_dump(), "lunch_week": lunch_style, "protein_weeks": proteins, "protein_week": proteins[0]},
+        "lunch_style": lunch_style,
+        "lunch_variations": lunch_pool,
         "days": days,
         "snack_suggestions": SNACK_TEMPLATES,
         "protein_target": "120-140g/day",
@@ -2624,7 +2713,7 @@ async def food_v1(week_start: Optional[str] = None):
     return {
         "week_start": week_start,
         "plan": plan,
-        "lunch_options": ["protein lunch bowls", "rice bowls", "wraps", "pasta salad", "egg/potato plates"],
+        "lunch_options": LUNCH_STYLE_OPTIONS,
         "protein_options": PROTEIN_OPTIONS,
         "budget_feelings": ["normal", "tighter", "treat week"],
     }

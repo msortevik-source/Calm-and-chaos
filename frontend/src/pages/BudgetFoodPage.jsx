@@ -462,6 +462,23 @@ function FoodV1() {
   useEffect(() => { load().catch(() => toast("Food plan refused to assemble itself.")); }, []);
 
   const setField = (key, value) => setForm((prev) => ({ ...prev, [key]: value }));
+  const setFieldAndRegenerate = (key, value) => {
+    let nextForm = null;
+    setForm((prev) => {
+      nextForm = { ...prev, [key]: value };
+      return nextForm;
+    });
+    window.setTimeout(async () => {
+      setAutoPlanning(true);
+      try {
+        await generatePlan(nextForm, true);
+      } catch (e) {
+        toast("Plan did not update.", { description: e?.response?.data?.detail || e?.message || "No useful error returned." });
+      } finally {
+        setAutoPlanning(false);
+      }
+    }, 0);
+  };
   const proteinChoices = form.protein_weeks || (form.protein_week ? [form.protein_week] : []);
   const generatePlan = async (nextForm = form, quiet = false) => {
     const selected = nextForm.protein_weeks || (nextForm.protein_week ? [nextForm.protein_week] : []);
@@ -529,9 +546,13 @@ function FoodV1() {
       <div className="warm-card rounded-3xl p-5">
         <div className="grid md:grid-cols-3 gap-3">
           <input data-testid="food-week-start" type="date" value={form.week_start || ""} onChange={(e) => setField("week_start", e.target.value)} className={inputCls} />
-          <select data-testid="food-lunch" value={form.lunch_week || ""} onChange={(e) => setField("lunch_week", e.target.value)} className={inputCls}>
-            {lunchOptions.map((item) => <option key={item} value={item}>{item}</option>)}
-          </select>
+          <label className="space-y-1">
+            <span className="text-xs uppercase tracking-[0.2em] text-moss-200/75">Preferred lunch format</span>
+            <select data-testid="food-lunch" value={form.lunch_week || ""} onChange={(e) => setFieldAndRegenerate("lunch_week", e.target.value)} className={inputCls}>
+              {lunchOptions.map((item) => <option key={item} value={item}>{item}</option>)}
+            </select>
+            <span className="block text-xs text-moss-200/70">Pick the structure. The planner varies the fillings.</span>
+          </label>
           <select data-testid="food-budget-feeling" value={form.budget_feeling || "normal"} onChange={(e) => setField("budget_feeling", e.target.value)} className={inputCls}>
             {budgetFeelings.map((item) => <option key={item} value={item}>{item}</option>)}
           </select>
@@ -603,6 +624,14 @@ function FoodV1() {
             <div className="text-sm text-moss-100 mt-2">
               Target: <span className="text-amber">{plan.protein_target || "120-140g/day"}</span>. Main meals aim for <span className="text-amber">{plan.main_meal_protein_target || "25-40g"}</span>.
             </div>
+            {(plan.lunch_variations || []).length > 0 && (
+              <div className="mt-4">
+                <div className="text-xs uppercase tracking-[0.22em] text-moss-200/70 mb-2">lunch format: {plan.lunch_style || form.lunch_week}</div>
+                <ul className="space-y-1 text-sm text-moss-100">
+                  {plan.lunch_variations.map((item) => <li key={item}>- {item}</li>)}
+                </ul>
+              </div>
+            )}
             {(plan.snack_suggestions || []).length > 0 && (
               <div className="mt-4">
                 <div className="text-xs uppercase tracking-[0.22em] text-moss-200/70 mb-2">snacks</div>
