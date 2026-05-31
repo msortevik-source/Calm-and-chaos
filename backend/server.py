@@ -225,9 +225,9 @@ class LifeUpgradeItem(LifeUpgradeCreate):
 class FoodPlanCreate(BaseModel):
     week_start: Optional[str] = None
     breakfast_default: str = "yoghurt, oats, kesam, fruit, protein shake"
-    lunch_week: str = "chicken pasta salad"
+    lunch_week: str = "protein lunch bowls"
     protein_week: Optional[str] = None
-    protein_weeks: List[str] = Field(default_factory=lambda: ["chicken week", "minced meat week"])
+    protein_weeks: List[str] = Field(default_factory=lambda: ["chicken", "salmon", "eggs"])
     shifts: Optional[str] = None
     training_schedule: Optional[str] = None
     leftovers: Optional[str] = None
@@ -305,13 +305,62 @@ SPENDING_CATEGORIES = [
 LIFE_UPGRADE_CATEGORIES = ["Home", "Maintenance", "Purchases", "Outdoor", "Storage", "Someday"]
 LIFE_UPGRADE_PRIORITIES = ["low", "medium", "high"]
 
-DINNER_TEMPLATES = {
-    "chicken week": ["chicken tacos", "chicken rice bowls", "chicken pasta", "chicken soup", "sheet-pan chicken"],
-    "minced meat week": ["taco bowls", "meat sauce pasta", "burger bowls", "chili", "meatball wraps"],
-    "pork week": ["pork noodles", "pork chops + potatoes", "pulled pork wraps", "pork fried rice", "pork tacos"],
-    "salmon week": ["salmon rice bowls", "salmon pasta", "salmon wraps", "salmon + potatoes", "salmon salad"],
-    "cheap goblin week": ["eggs on toast", "bean chili", "tuna pasta", "rice + frozen veg", "soup + grilled cheese"],
+PROTEIN_OPTIONS = ["chicken", "salmon", "minced meat", "pork", "eggs", "yoghurt/kesam/skyr", "cottage cheese"]
+PROTEIN_ALIASES = {
+    "chicken week": "chicken",
+    "salmon week": "salmon",
+    "minced meat week": "minced meat",
+    "pork week": "pork",
+    "egg week": "eggs",
+    "eggs week": "eggs",
+    "cheap week": "eggs",
+    "cheap goblin week": "eggs",
 }
+MEAL_TEMPLATES = {
+    "chicken": {
+        "lunch": ["chicken rice bowl with cucumber, spinach, avocado", "chicken pasta salad with yoghurt dressing", "chicken wraps with salad and carrots"],
+        "dinner": ["chicken rice bowl with broccoli", "chicken pasta with spinach", "sheet-pan chicken with potatoes and carrots"],
+        "shopping": ["chicken breast/thighs"],
+    },
+    "salmon": {
+        "lunch": ["salmon, eggs, potatoes, cucumber, avocado", "salmon rice bowl with spinach and yoghurt dressing", "salmon wrap with salad and cucumber"],
+        "dinner": ["salmon with potatoes, broccoli, and cucumber", "salmon pasta with spinach", "salmon rice bowl with avocado"],
+        "shopping": ["salmon fillets"],
+    },
+    "minced meat": {
+        "lunch": ["minced meat rice bowl with carrots and cucumber", "meat sauce pasta leftovers", "burger bowl with potatoes and salad"],
+        "dinner": ["meat sauce pasta with spinach", "taco rice bowls with salad", "minced meat potato skillet with carrots"],
+        "shopping": ["minced meat"],
+    },
+    "pork": {
+        "lunch": ["pork wrap with cucumber and salad", "pork rice bowl with frozen veg", "pork, potatoes, and carrots leftovers"],
+        "dinner": ["pork chops with potatoes and broccoli", "pork noodles with frozen veg", "pork fried rice with egg"],
+        "shopping": ["pork chops/strips"],
+    },
+    "eggs": {
+        "lunch": ["egg, potato, avocado, and cucumber plate", "egg wraps with spinach", "omelette with potatoes and salad"],
+        "dinner": ["egg fried rice with frozen veg", "loaded omelette with potatoes", "breakfast-for-dinner eggs, toast, avocado"],
+        "shopping": ["eggs"],
+    },
+    "yoghurt/kesam/skyr": {
+        "lunch": ["skyr/yoghurt bowl with oats, banana, berries, and cottage cheese", "kesam bowl with oats and fruit"],
+        "dinner": ["protein yoghurt backup bowl with toast and eggs"],
+        "shopping": ["protein yoghurt/skyr", "kesam"],
+    },
+    "cottage cheese": {
+        "lunch": ["cottage cheese toast with eggs and cucumber", "cottage cheese bowl with berries and oats"],
+        "dinner": ["cottage cheese pasta bowl with spinach"],
+        "shopping": ["cottage cheese"],
+    },
+}
+CARB_STAPLES = ["potatoes", "rice", "pasta", "oats", "bread/wraps"]
+VEG_STAPLES = ["cucumber", "spinach", "broccoli", "carrots", "salad", "frozen veg"]
+SNACK_TEMPLATES = [
+    "protein yoghurt/skyr + berries (20-30g protein)",
+    "boiled eggs + fruit (12-18g protein)",
+    "cottage cheese + cucumber/toast (20-30g protein)",
+    "kesam + banana after training (20-30g protein)",
+]
 
 def _month_key(value: Optional[str] = None) -> str:
     return _budget_cycle_key(value)
@@ -614,48 +663,76 @@ async def _spending_checkins_persistent(month: Optional[str] = None, store: Opti
 def _food_plan(req: FoodPlanCreate) -> Dict[str, Any]:
     week_start = _week_start(req.week_start)
     start = date_cls.fromisoformat(week_start)
-    proteins = [p for p in (req.protein_weeks or []) if p in DINNER_TEMPLATES]
-    if not proteins and req.protein_week in DINNER_TEMPLATES:
-        proteins = [req.protein_week]
+    raw_proteins = req.protein_weeks or ([req.protein_week] if req.protein_week else [])
+    proteins = []
+    for raw in raw_proteins:
+        key = PROTEIN_ALIASES.get(str(raw).lower(), raw)
+        if key in PROTEIN_OPTIONS and key not in proteins:
+            proteins.append(key)
     if not proteins:
-        proteins = ["chicken week", "minced meat week"]
-    proteins = proteins[:4]
+        proteins = ["chicken", "salmon", "eggs"]
+    proteins = proteins[:5]
+    lunch_pool = []
     dinner_pool = []
+    shopping_proteins = []
     for protein in proteins:
-        dinner_pool.extend(DINNER_TEMPLATES.get(protein, []))
+        template = MEAL_TEMPLATES.get(protein, {})
+        lunch_pool.extend(template.get("lunch", []))
+        dinner_pool.extend(template.get("dinner", []))
+        shopping_proteins.extend(template.get("shopping", []))
+    if not lunch_pool:
+        lunch_pool = ["protein lunch bowl with rice/potatoes, cucumber, spinach, and yoghurt dressing"]
+    if not dinner_pool:
+        dinner_pool = ["simple protein dinner with potatoes/rice and vegetables"]
     days = []
     for i in range(7):
         day = start + timedelta(days=i)
         label = day.strftime("%A")
+        lunch = lunch_pool[i % len(lunch_pool)]
         if label == "Saturday":
             dinner = f"{dinner_pool[0]} after groceries"
         elif label == "Sunday":
             dinner = f"{dinner_pool[1 % len(dinner_pool)]} + recovery food"
         else:
             dinner = dinner_pool[i % len(dinner_pool)]
+        snack = SNACK_TEMPLATES[i % len(SNACK_TEMPLATES)]
         days.append({
             "date": day.isoformat(),
             "day": label,
             "breakfast": req.breakfast_default,
-            "lunch": req.lunch_week,
+            "lunch": lunch,
             "dinner": dinner,
+            "snack": snack,
+            "protein_estimate_g": 125,
         })
     shopping = [
-        req.breakfast_default,
-        f"lunch system: {req.lunch_week}",
-        f"proteins: {', '.join(proteins)}",
-        "fruit / vegetables",
-        "easy backup meal",
-        "long run / recovery snack",
+        "oats",
+        "yoghurt/kesam/skyr",
+        "banana",
+        "berries/fruit",
+        *shopping_proteins,
+        *CARB_STAPLES,
+        *VEG_STAPLES,
+        "avocado",
+        "protein yoghurt/skyr snacks",
+        "easy backup: eggs + toast/potatoes",
     ]
+    seen_shopping = []
+    for item in shopping:
+        if item not in seen_shopping:
+            seen_shopping.append(item)
     estimate = {"tighter": 850, "normal": 1100, "treat week": 1400}.get(req.budget_feeling, 1100)
+    estimate += max(0, len(proteins) - 2) * 120
     return {
         "week_start": week_start,
         "inputs": {**req.model_dump(), "protein_weeks": proteins, "protein_week": proteins[0]},
         "days": days,
-        "shopping_list": shopping,
+        "snack_suggestions": SNACK_TEMPLATES,
+        "protein_target": "120-140g/day",
+        "main_meal_protein_target": "25-40g",
+        "shopping_list": seen_shopping,
         "grocery_estimate": estimate,
-        "note": "Rotation over reinvention. Future you has at least been considered.",
+        "note": "Muscle-building, family-friendly, no tuna, no beans. Rotation over reinvention.",
     }
 
 ASSISTANT_SYSTEM = (
@@ -2547,8 +2624,8 @@ async def food_v1(week_start: Optional[str] = None):
     return {
         "week_start": week_start,
         "plan": plan,
-        "lunch_options": ["chicken pasta salad", "rice bowls", "wraps", "soup + sandwich", "pasta bake"],
-        "protein_options": list(DINNER_TEMPLATES.keys()),
+        "lunch_options": ["protein lunch bowls", "rice bowls", "wraps", "pasta salad", "egg/potato plates"],
+        "protein_options": PROTEIN_OPTIONS,
         "budget_feelings": ["normal", "tighter", "treat week"],
     }
 

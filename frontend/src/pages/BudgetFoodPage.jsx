@@ -22,8 +22,8 @@ const cycleKeyForDate = (iso = todayIso()) => {
 };
 const inputCls = "bg-moss-800/60 border border-moss-700 rounded-xl px-3 py-2 text-sm text-moss-50 placeholder-moss-200/50 outline-none focus:border-amber/50 transition-colors";
 const FALLBACK_SPENDING_CATEGORIES = ["groceries", "snus", "Monster / energy drink", "candy / snacks", "takeaway", "coffee", "transport", "random nonsense", "other"];
-const FALLBACK_LUNCH_OPTIONS = ["chicken pasta salad", "rice bowls", "wraps", "soup + sandwich", "pasta bake"];
-const FALLBACK_PROTEIN_OPTIONS = ["chicken week", "minced meat week", "pork week", "salmon week", "cheap week"];
+const FALLBACK_LUNCH_OPTIONS = ["protein lunch bowls", "rice bowls", "wraps", "pasta salad", "egg/potato plates"];
+const FALLBACK_PROTEIN_OPTIONS = ["chicken", "salmon", "minced meat", "pork", "eggs", "yoghurt/kesam/skyr", "cottage cheese"];
 const FALLBACK_BUDGET_FEELINGS = ["normal", "tighter", "treat week"];
 
 const money = (value, decimals = 0) => {
@@ -451,6 +451,7 @@ function FoodV1() {
   const [data, setData] = useState(null);
   const [form, setForm] = useState({});
   const [busy, setBusy] = useState(false);
+  const [autoPlanning, setAutoPlanning] = useState(false);
 
   const load = async () => {
     const res = await getFoodV1();
@@ -462,25 +463,43 @@ function FoodV1() {
 
   const setField = (key, value) => setForm((prev) => ({ ...prev, [key]: value }));
   const proteinChoices = form.protein_weeks || (form.protein_week ? [form.protein_week] : []);
+  const generatePlan = async (nextForm = form, quiet = false) => {
+    const selected = nextForm.protein_weeks || (nextForm.protein_week ? [nextForm.protein_week] : []);
+    if (!selected.length) {
+      if (!quiet) toast("Pick at least one protein. The fridge needs a plot.");
+      return null;
+    }
+    const res = await saveFoodV1({ ...nextForm, protein_weeks: selected, protein_week: selected[0] });
+    setData((prev) => ({ ...prev, plan: res.plan, week_start: res.plan.week_start }));
+    setForm(res.plan.inputs);
+    return res;
+  };
   const toggleProtein = (protein) => {
+    let nextForm = null;
     setForm((prev) => {
       const current = prev.protein_weeks || (prev.protein_week ? [prev.protein_week] : []);
       const exists = current.includes(protein);
-      const next = exists ? current.filter((item) => item !== protein) : [...current, protein].slice(0, 4);
-      return { ...prev, protein_weeks: next, protein_week: next[0] || "" };
+      const next = exists ? current.filter((item) => item !== protein) : [...current, protein].slice(0, 5);
+      nextForm = { ...prev, protein_weeks: next, protein_week: next[0] || "" };
+      return nextForm;
     });
+    window.setTimeout(async () => {
+      if (!nextForm?.protein_weeks?.length) return;
+      setAutoPlanning(true);
+      try {
+        await generatePlan(nextForm, true);
+      } catch (e) {
+        toast("Plan did not update.", { description: e?.response?.data?.detail || e?.message || "No useful error returned." });
+      } finally {
+        setAutoPlanning(false);
+      }
+    }, 0);
   };
 
   const save = async () => {
-    if (!proteinChoices.length) {
-      toast("Pick at least one protein. The fridge needs a plot.");
-      return;
-    }
     setBusy(true);
     try {
-      const res = await saveFoodV1({ ...form, protein_weeks: proteinChoices, protein_week: proteinChoices[0] });
-      setData((prev) => ({ ...prev, plan: res.plan, week_start: res.plan.week_start }));
-      setForm(res.plan.inputs);
+      await generatePlan({ ...form, protein_weeks: proteinChoices, protein_week: proteinChoices[0] });
       toast("Week handled. Civilization may continue.");
     } catch (e) {
       toast("Food plan did not save.", { description: e?.response?.data?.detail || e?.message || "No useful error returned." });
@@ -502,6 +521,9 @@ function FoodV1() {
           <Utensils size={14} /> Saturday to Saturday
         </div>
         <h2 className="font-heading text-3xl text-moss-50">What are we eating?</h2>
+        <p className="text-sm text-moss-200 mt-2 max-w-2xl">
+          Pick 2-5 proteins and the planner builds muscle-friendly meals, snacks, and a shopping list. No tuna. No beans. Civilization survives.
+        </p>
       </div>
 
       <div className="warm-card rounded-3xl p-5">
@@ -516,7 +538,10 @@ function FoodV1() {
           <input data-testid="food-breakfast" value={form.breakfast_default || ""} onChange={(e) => setField("breakfast_default", e.target.value)} placeholder="breakfast default" className={inputCls + " md:col-span-3"} />
         </div>
         <div className="mt-4">
-          <div className="text-xs uppercase tracking-[0.22em] text-moss-200/70 mb-2">proteins, pick 2-4 if possible</div>
+          <div className="flex items-center justify-between gap-3 mb-2">
+            <div className="text-xs uppercase tracking-[0.22em] text-moss-200/70">weekly proteins, pick 2-5</div>
+            {autoPlanning && <div className="text-xs text-amber">updating meals...</div>}
+          </div>
           <div className="flex flex-wrap gap-2">
             {proteinOptions.map((item) => {
               const active = proteinChoices.includes(item);
@@ -539,8 +564,8 @@ function FoodV1() {
           <textarea data-testid="food-training" value={form.training_schedule || ""} onChange={(e) => setField("training_schedule", e.target.value)} placeholder="training" className={inputCls + " min-h-[76px] resize-none"} />
           <textarea data-testid="food-leftovers" value={form.leftovers || ""} onChange={(e) => setField("leftovers", e.target.value)} placeholder="leftovers already home" className={inputCls + " min-h-[76px] resize-none"} />
         </div>
-        <button data-testid="food-save" disabled={busy} onClick={save} className="pill-btn primary rounded-full px-5 py-2 text-xs inline-flex items-center gap-2 mt-4">
-          <CalendarDays size={13} /> Plan week
+        <button data-testid="food-save" disabled={busy || autoPlanning} onClick={save} className="pill-btn primary rounded-full px-5 py-2 text-xs inline-flex items-center gap-2 mt-4">
+          <CalendarDays size={13} /> Regenerate week
         </button>
       </div>
 
@@ -559,6 +584,8 @@ function FoodV1() {
                     <div><span className="text-moss-200">Breakfast:</span> {day.breakfast}</div>
                     <div><span className="text-moss-200">Lunch:</span> {day.lunch}</div>
                     <div><span className="text-moss-200">Dinner:</span> {day.dinner}</div>
+                    <div><span className="text-moss-200">Snack:</span> {day.snack}</div>
+                    <div><span className="text-moss-200">Protein target:</span> {day.protein_estimate_g || 125}g-ish</div>
                   </div>
                 </div>
               ))}
@@ -572,6 +599,18 @@ function FoodV1() {
             <ul className="space-y-2 text-sm text-moss-100">
               {(plan.shopping_list || []).map((item) => <li key={item}>- {item}</li>)}
             </ul>
+            <div className="mt-5 text-xs uppercase tracking-[0.22em] text-moss-200/70">protein logic</div>
+            <div className="text-sm text-moss-100 mt-2">
+              Target: <span className="text-amber">{plan.protein_target || "120-140g/day"}</span>. Main meals aim for <span className="text-amber">{plan.main_meal_protein_target || "25-40g"}</span>.
+            </div>
+            {(plan.snack_suggestions || []).length > 0 && (
+              <div className="mt-4">
+                <div className="text-xs uppercase tracking-[0.22em] text-moss-200/70 mb-2">snacks</div>
+                <ul className="space-y-1 text-sm text-moss-100">
+                  {plan.snack_suggestions.map((item) => <li key={item}>- {item}</li>)}
+                </ul>
+              </div>
+            )}
             <div className="mt-5 text-xs uppercase tracking-[0.22em] text-moss-200/70">rough estimate</div>
             <div className="font-heading text-2xl text-moss-50">{plan.grocery_estimate} kr</div>
             <p className="text-sm text-moss-200 italic mt-4">{plan.note}</p>
