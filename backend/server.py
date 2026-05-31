@@ -9,6 +9,8 @@ import logging
 import uuid
 import requests as _http
 import json
+import asyncio
+import time
 from pathlib import Path
 from pydantic import BaseModel, Field, ConfigDict
 from typing import Any, Dict, List, Optional
@@ -1412,6 +1414,14 @@ def _context_intents(text: str) -> List[str]:
         intents.append("general conversation")
     return intents
 
+def _is_weekly_analysis_request(text: str) -> bool:
+    t = text.lower()
+    return "weekly summary" in t or ("week" in t and any(word in t for word in ("summary", "analysis", "analyze", "review")))
+
+def _is_monthly_analysis_request(text: str) -> bool:
+    t = text.lower()
+    return "monthly summary" in t or ("month" in t and any(word in t for word in ("summary", "analysis", "analyze", "review", "compare")))
+
 def _spending_category_hint(text: str) -> Optional[str]:
     t = text.lower()
     hints = {
@@ -1470,6 +1480,21 @@ def _budget_router_context(text: str, store: Optional[Dict[str, Any]] = None) ->
         ))
     return "\n".join(lines)
 
+def _budget_cycle_context_from_store(store: Dict[str, Any]) -> str:
+    month = _budget_cycle_key()
+    setup = store.get("budget_setups", {}).get(month) or {"income": DEFAULT_INCOME, "fixed_expenses": DEFAULT_FIXED_EXPENSES}
+    summary = _budget_summary(month, setup, store.get("spending", []))
+    lines = [
+        "budget cycle:",
+        f"- cycle: {summary['cycle_label']}",
+        f"- income {_kr(summary['income_total'])}; fixed {_kr(summary['fixed_total'])}; flexible logged {_kr(summary['flexible_total'])}; expected left {_kr(summary['left_after_logged_spending'])}",
+        f"- checked in {summary['checked_days']}/{summary['days_in_cycle']} days",
+    ]
+    if summary.get("by_category"):
+        top = sorted(summary["by_category"].items(), key=lambda item: item[1], reverse=True)[:6]
+        lines.append("- category totals: " + ", ".join(f"{name} {_kr(value)}" for name, value in top))
+    return "\n".join(lines)
+
 def _food_router_context(text: str, store: Optional[Dict[str, Any]] = None) -> str:
     store = store or _read_life_store()
     plans = store.get("food_plans", {})
@@ -1497,6 +1522,18 @@ def _food_router_context(text: str, store: Optional[Dict[str, Any]] = None) -> s
             "- no saved weekly food plan yet",
             "- default flow is Saturday-to-Saturday, one lunch system, one protein week, shopping list estimate in kr",
         ])
+    return "\n".join(lines)
+
+def _weekly_food_context(store: Dict[str, Any]) -> str:
+    return _food_router_context("weekly food summary", store=store)
+
+def _calendar_events_context(events: List[Dict[str, Any]]) -> str:
+    if not events:
+        return "calendar/recovery:\n- no calendar events returned for today"
+    lines = ["calendar/recovery:"]
+    for ev in events[:6]:
+        location = f" ({ev.get('location')})" if ev.get("location") else ""
+        lines.append(f"- {ev.get('start', '')}: {ev.get('summary', '')}{location}")
     return "\n".join(lines)
 
 async def _recent_mongo_docs(collection_name: str, limit: int = 8, days: int = 30):
@@ -1535,6 +1572,31 @@ def _training_router_context(local_training: List[Dict[str, Any]], mongo_trainin
     else:
         lines.append("- no recent workouts logged")
     lines.append("- Saturday or Sunday can be long run; Sunday still gets recovery-food attention in food planning.")
+    return "\n".join(lines)
+
+def _weekly_training_context(training: List[Dict[str, Any]]) -> str:
+    lines = ["training/movement last 7 days:"]
+    if not training:
+        lines.append("- no workouts logged this week, or tracking may be incomplete")
+        return "\n".join(lines)
+    run_count = len([t for t in training if t.get("kind") == "run"])
+    strength_count = len([t for t in training if t.get("kind") == "strength"])
+    total_km = sum(float(t.get("distance_km") or 0) for t in training if t.get("kind") == "run")
+    lines.append(f"- logged sessions: {len(training)} ({run_count} run, {strength_count} strength)")
+    if total_km:
+        lines.append(f"- logged running volume: {total_km:.1f} km")
+    recent = []
+    for e in sorted(training, key=lambda x: x.get("timestamp") or x.get("date") or "", reverse=True)[:8]:
+        bits = [e.get("date") or "", e.get("kind") or ""]
+        if e.get("session_name"):
+            bits.append(e["session_name"])
+        if e.get("distance_km"):
+            bits.append(f'{e["distance_km"]} km')
+        if e.get("avg_hr"):
+            bits.append(f'HR {e["avg_hr"]}')
+        recent.append(" ".join([b for b in bits if b]))
+    if recent:
+        lines.append("- recent logs: " + "; ".join(recent))
     return "\n".join(lines)
 
 def _emotional_router_context(local_dumps: List[Dict[str, Any]], mongo_dumps: List[Dict[str, Any]]) -> str:
@@ -1612,42 +1674,91 @@ async def _letters_router_context() -> str:
         lines.append(f"- {letter.get('week_key', '')}: {body}")
     return "\n".join(lines)
 
+async def _weekly_analysis_context(text: str) -> str:
+    store_task = asyncio.create_task(_read_persistent_life_store())
+    cutoff = (_now_oslo().date() - timedelta(days=7)).isoformat()
+    training_task = asyncio.create_task(
+        db.training.find({"date": {"$gte": cutoff}}, {"_id": 0}).sort("date", -1).to_list(40)
+    )
+    calendar_task = asyncio.create_task(calendar_today())
+
+    store = await store_task
+    training_result, calendar_result = await asyncio.gather(training_task, calendar_task, return_exceptions=True)
+    training = [] if isinstance(training_result, Exception) else training_result
+    calendar_events = [] if isinstance(calendar_result, Exception) else (calendar_result.get("events") or [])
+
+    parts = [
+        _weekly_training_context(training),
+        _budget_cycle_context_from_store(store),
+        _weekly_food_context(store),
+        _calendar_events_context(calendar_events),
+    ]
+    return (
+        "CONTEXT ROUTER SUMMARY FROM CALM & CHAOS.\n"
+        "intent: weekly analysis\n"
+        "Scope: last 7 days for training/movement and current budget cycle for money. "
+        "Missing logs are incomplete tracking, not failure. Keep this concise and pattern-focused.\n\n"
+        + "\n\n".join([part for part in parts if part])
+    )
+
 async def _gather_context_v2(text: str) -> str:
+    if _is_weekly_analysis_request(text):
+        return await _weekly_analysis_context(text)
+
     intents = _context_intents(text)
     intent_set = set(intents)
     mixed = len(intent_set - {"planning"}) > 1
-    store = await _read_persistent_life_store()
     context_parts = []
     lower = text.lower()
+
+    store_task = asyncio.create_task(_read_persistent_life_store())
+    mongo_training_task = None
+    mongo_dumps_task = None
+    calendar_task = None
+    patterns_task = None
+    letters_task = None
+
+    if "training" in intent_set or ("food" in intent_set and "week" in lower) or ("planning" in intent_set and not any(i in intent_set for i in ("food", "training", "budget", "calendar"))):
+        mongo_training_task = asyncio.create_task(_recent_mongo_docs("training", limit=5))
+    if "emotional support" in intent_set or "work stress" in intent_set or ("brain dump" in intent_set and "emotional support" not in intent_set):
+        mongo_dumps_task = asyncio.create_task(_recent_mongo_docs("braindumps", limit=8))
+    if "work stress" in intent_set or "calendar" in intent_set:
+        calendar_task = asyncio.create_task(_calendar_router_context())
+    if "patterns" in intent_set:
+        patterns_task = asyncio.create_task(_patterns_router_context())
+    if "letters" in intent_set:
+        letters_task = asyncio.create_task(_letters_router_context())
+
+    store = await store_task
 
     if "budget" in intent_set:
         context_parts.append(_budget_router_context(text, store=store))
     if "food" in intent_set or ("planning" in intent_set and any(w in lower for w in ("eat", "food", "meal", "shopping", "grocery"))):
         context_parts.append(_food_router_context(text, store=store))
     if "training" in intent_set or ("food" in intent_set and "week" in lower):
-        mongo_training = await _recent_mongo_docs("training", limit=5)
+        mongo_training = await mongo_training_task if mongo_training_task else []
         context_parts.append(_training_router_context(store.get("training", [])[-10:], mongo_training, text))
     if "emotional support" in intent_set or "work stress" in intent_set:
-        mongo_dumps = await _recent_mongo_docs("braindumps", limit=8)
+        mongo_dumps = await mongo_dumps_task if mongo_dumps_task else []
         context_parts.append(_emotional_router_context(store.get("braindumps", [])[-10:], mongo_dumps))
     if "work stress" in intent_set or "calendar" in intent_set:
-        calendar_context = await _calendar_router_context()
+        calendar_context = await calendar_task if calendar_task else ""
         if calendar_context:
             context_parts.append(calendar_context)
     if "planning" in intent_set and not any(i in intent_set for i in ("food", "training", "budget", "calendar")):
         context_parts.append(_food_router_context(text, store=store))
-        mongo_training = await _recent_mongo_docs("training", limit=4)
+        mongo_training = await mongo_training_task if mongo_training_task else []
         context_parts.append(_training_router_context(store.get("training", [])[-8:], mongo_training, text))
     if "patterns" in intent_set:
-        patterns_context = await _patterns_router_context()
+        patterns_context = await patterns_task if patterns_task else ""
         if patterns_context:
             context_parts.append(patterns_context)
     if "letters" in intent_set:
-        letters_context = await _letters_router_context()
+        letters_context = await letters_task if letters_task else ""
         if letters_context:
             context_parts.append(letters_context)
     if "brain dump" in intent_set and "emotional support" not in intent_set:
-        mongo_dumps = await _recent_mongo_docs("braindumps", limit=6)
+        mongo_dumps = await mongo_dumps_task if mongo_dumps_task else []
         context_parts.append(_emotional_router_context(store.get("braindumps", [])[-8:], mongo_dumps))
     if not context_parts:
         return ""
@@ -1725,16 +1836,22 @@ def _format_user_message_with_history(history, current_text: str) -> str:
 
 @api_router.post("/chat", response_model=ChatResponse)
 async def chat(req: ChatRequest):
+    t0 = time.perf_counter()
     if not req.text or not req.text.strip():
         raise HTTPException(status_code=400, detail="empty text")
     if not (OPENAI_API_KEY or EMERGENT_LLM_KEY):
         raise HTTPException(status_code=500, detail="OpenAI key not configured")
 
-    # 1. Fetch recent history BEFORE inserting the new one
-    history = await _recent_history(limit=10)
+    text = req.text.strip()
+    is_summary = _is_weekly_analysis_request(text) or _is_monthly_analysis_request(text)
+
+    # 1. Fetch recent history and routed context in parallel.
+    context_started = time.perf_counter()
+    history_task = asyncio.create_task(_recent_history(limit=4 if is_summary else 8))
+    context_task = asyncio.create_task(_gather_context_v2(text))
 
     # 2. Persist the user message
-    user_msg = ChatMessage(role="user", text=req.text.strip(), mode=req.mode)
+    user_msg = ChatMessage(role="user", text=text, mode=req.mode)
     user_doc = user_msg.model_dump()
     user_doc["timestamp"] = user_doc["timestamp"].isoformat()
     try:
@@ -1743,15 +1860,18 @@ async def chat(req: ChatRequest):
         logging.warning("mongo unavailable for user chat save; using local fallback")
         _append_local_chat_message(user_doc)
 
-    # 3. Gather data-aware context based on what the user is asking about
-    data_context = await _gather_context_v2(req.text)
+    history = await history_task
+    data_context = await context_task
+    context_ms = round((time.perf_counter() - context_started) * 1000)
 
     # 4. Build ONE user message with history baked in, then make a SINGLE LLM call
     system = _compose_system(req.mode, data_context=data_context)
-    composed = _format_user_message_with_history(history, req.text.strip())
+    composed = _format_user_message_with_history(history, text)
 
     try:
+        llm_started = time.perf_counter()
         reply_text = await _send_llm_message(system, composed, mode=req.mode)
+        llm_ms = round((time.perf_counter() - llm_started) * 1000)
     except Exception as e:
         logging.exception("LLM error")
         raise HTTPException(status_code=502, detail=f"Analysis engine did not return: {e}")
@@ -1764,6 +1884,16 @@ async def chat(req: ChatRequest):
     except Exception:
         logging.warning("mongo unavailable for assistant chat save; using local fallback")
         _append_local_chat_message(a_doc)
+
+    total_ms = round((time.perf_counter() - t0) * 1000)
+    logging.info(
+        "chat_perf summary=%s context_ms=%s llm_ms=%s total_ms=%s context_chars=%s",
+        is_summary,
+        context_ms,
+        llm_ms,
+        total_ms,
+        len(data_context or ""),
+    )
 
     return ChatResponse(reply=assistant_msg.text, user_msg=user_msg, assistant_msg=assistant_msg)
 

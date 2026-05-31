@@ -6,9 +6,17 @@ import { renderInline } from "../lib/markdown";
 import { CalendarDays, CalendarRange, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
+const LOADING_LINES = [
+  "Brewing coffee and checking the receipts.",
+  "Looking for patterns.",
+  "Checking whether snacks became emotional support again.",
+  "Sorting signal from noise.",
+];
+
 export default function ConversationPage() {
   const [messages, setMessages] = useState([]);
   const [busy, setBusy] = useState(false);
+  const [loadingIndex, setLoadingIndex] = useState(0);
   const [seed, setSeed] = useState("");
   const [summaryPlaceholder, setSummaryPlaceholder] = useState(null);
   const endRef = useRef(null);
@@ -32,6 +40,17 @@ export default function ConversationPage() {
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  useEffect(() => {
+    if (!busy) {
+      setLoadingIndex(0);
+      return undefined;
+    }
+    const id = window.setInterval(() => {
+      setLoadingIndex((prev) => (prev + 1) % LOADING_LINES.length);
+    }, 2200);
+    return () => window.clearInterval(id);
+  }, [busy]);
 
   const submit = async (text, mode) => {
     setSummaryPlaceholder(null);
@@ -136,6 +155,12 @@ Goal: pattern awareness and momentum, not perfection.`
             </p>
           </div>
         ))}
+        {busy && (
+          <div className="warm-card rounded-2xl p-4 border border-amber/20" data-testid="analysis-loading">
+            <div className="text-[10px] uppercase tracking-[0.25em] mb-2 text-amber/90">analysis</div>
+            <p className="text-moss-100 italic">{LOADING_LINES[loadingIndex]}</p>
+          </div>
+        )}
         <div ref={endRef} />
       </div>
 
