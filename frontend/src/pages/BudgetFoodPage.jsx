@@ -149,7 +149,13 @@ function BudgetV1() {
         fixed_notes: setup.fixed_notes || {},
         fixed_active: setup.fixed_active || {},
       });
-      await archiveBudgetCycle({ cycle });
+      const res = await archiveBudgetCycle({ cycle });
+      if (res.archive) {
+        setArchives((prev) => [
+          res.archive,
+          ...prev.filter((item) => item.cycle_key !== res.archive.cycle_key),
+        ]);
+      }
       await load();
       toast("Cycle archived. Receipts are in the drawer.");
     } catch (e) {
@@ -652,18 +658,15 @@ function FoodV1() {
 
 export default function BudgetFoodPage() {
   return (
-    <div className="px-6 md:px-12 py-10 md:py-16 max-w-6xl mx-auto" data-testid="budget-food-page">
+    <div className="px-6 md:px-12 py-10 md:py-16 max-w-6xl mx-auto" data-testid="budget-page">
       <div className="mb-10">
-        <div className="text-xs uppercase tracking-[0.25em] text-moss-200/70 mb-2">Future me is handled</div>
-        <h1 className="font-heading text-4xl md:text-5xl text-moss-50">Food & budget</h1>
+        <div className="text-xs uppercase tracking-[0.25em] text-moss-200/70 mb-2">Receipts without shame</div>
+        <h1 className="font-heading text-4xl md:text-5xl text-moss-50">Budget</h1>
         <p className="text-moss-200 mt-3 font-body italic max-w-xl">
-          Awareness, not accounting. Rotation, not reinvention.
+          Awareness, not accounting. Useful numbers, fewer mystery leaks.
         </p>
       </div>
-      <div className="space-y-14">
-        <BudgetV1 />
-        <FoodV1 />
-      </div>
+      <BudgetV1 />
     </div>
   );
 }

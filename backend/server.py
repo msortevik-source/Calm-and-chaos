@@ -511,7 +511,7 @@ def _days_in_month(month: str) -> int:
     return (nxt - date_cls(year, month_num, 1)).days
 
 def _empty_life_store() -> Dict[str, Any]:
-    return {"budget_setups": {}, "spending": [], "spending_checkins": [], "food_plans": {}, "braindumps": [], "training": [], "life_upgrades": []}
+    return {"budget_setups": {}, "budget_archives": [], "spending": [], "spending_checkins": [], "food_plans": {}, "braindumps": [], "training": [], "life_upgrades": []}
 
 def _read_life_store() -> Dict[str, Any]:
     if not LOCAL_LIFE_FILE.exists():
@@ -521,6 +521,7 @@ def _read_life_store() -> Dict[str, Any]:
         if not isinstance(data, dict):
             return _empty_life_store()
         data.setdefault("budget_setups", {})
+        data.setdefault("budget_archives", [])
         data.setdefault("spending", [])
         data.setdefault("spending_checkins", [])
         data.setdefault("food_plans", {})
@@ -555,7 +556,7 @@ def _merge_life_stores(mongo_store: Optional[Dict[str, Any]], local_store: Optio
     merged = _empty_life_store()
     merged["budget_setups"] = {**local_store.get("budget_setups", {}), **mongo_store.get("budget_setups", {})}
     merged["food_plans"] = {**local_store.get("food_plans", {}), **mongo_store.get("food_plans", {})}
-    for key in ("spending", "spending_checkins", "braindumps", "training", "life_upgrades"):
+    for key in ("budget_archives", "spending", "spending_checkins", "braindumps", "training", "life_upgrades"):
         merged[key] = _merge_docs_by_id(mongo_store.get(key, []), local_store.get(key, []))
     return merged
 
@@ -1226,22 +1227,36 @@ def _strava_activity_to_training(activity: Dict[str, Any]) -> Optional[Dict[str,
     kind = "run" if activity_type.lower() in ("run", "trailrun", "virtualrun") else "note"
     start_date = activity.get("start_date_local") or activity.get("start_date") or ""
     distance_km = round(float(activity.get("distance") or 0) / 1000, 2) if activity.get("distance") is not None else None
-    duration_min = round(float(activity.get("moving_time") or activity.get("elapsed_time") or 0) / 60, 1)
+    moving_time_min = round(float(activity.get("moving_time") or 0) / 60, 1) if activity.get("moving_time") is not None else None
+    elapsed_time_min = round(float(activity.get("elapsed_time") or 0) / 60, 1) if activity.get("elapsed_time") is not None else None
+    duration_min = moving_time_min or elapsed_time_min
     if not start_date:
         return None
     return {
         "id": f"strava-{activity.get('id')}",
         "kind": kind,
         "date": start_date[:10],
+        "start_datetime": start_date,
         "session_name": activity.get("name") or activity_type,
+        "type": activity_type,
         "distance_km": distance_km,
+        "distance_m": activity.get("distance"),
         "duration_min": duration_min,
+        "moving_time_min": moving_time_min,
+        "elapsed_time_min": elapsed_time_min,
         "pace": _pace_from_strava(activity) if kind == "run" else None,
+        "average_speed_mps": activity.get("average_speed"),
+        "max_speed_mps": activity.get("max_speed"),
+        "elevation_gain_m": activity.get("total_elevation_gain"),
         "avg_hr": int(activity.get("average_heartrate")) if activity.get("average_heartrate") else None,
+        "max_hr": int(activity.get("max_heartrate")) if activity.get("max_heartrate") else None,
+        "perceived_effort": None,
         "notes": f"Imported from Strava ({activity_type}).",
+        "source": "Strava",
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "strava_id": str(activity.get("id")),
         "strava_type": activity_type,
+        "strava_updated_at": activity.get("updated_at"),
     }
 
 # --- Data-aware conversation: detect which collections the user is asking about ---
@@ -1295,7 +1310,7 @@ def _summarise_life_store_for_context(text: str, wants_budget=False, wants_meals
         else:
             spending = [s for s in spending if _date_in_budget_cycle(s.get("date"), month)]
         if spending:
-            lines.append(f"FOOD & BUDGET V1 SPENDING ({date_label or cycle['label']}):")
+            lines.append(f"BUDGET V1 SPENDING ({date_label or cycle['label']}):")
             total = 0.0
             by_cat: Dict[str, float] = {}
             for s in sorted(spending, key=lambda x: x.get("date", ""), reverse=True)[:20]:
@@ -1310,7 +1325,7 @@ def _summarise_life_store_for_context(text: str, wants_budget=False, wants_meals
         if setup:
             summary = _budget_summary(month, setup, store.get("spending", []))
             lines.append(
-                f"FOOD & BUDGET V1 CYCLE SNAPSHOT ({cycle['label']}): income {summary['income_total']:.2f} kr, "
+                f"BUDGET V1 CYCLE SNAPSHOT ({cycle['label']}): income {summary['income_total']:.2f} kr, "
                 f"fixed {summary['fixed_total']:.2f} kr, flexible logged {summary['flexible_total']:.2f} kr, "
                 f"checked in {summary['checked_days']}/{summary['days_in_cycle']} days."
             )
@@ -1715,7 +1730,11 @@ def _training_router_context(local_training: List[Dict[str, Any]], mongo_trainin
     today_name = _now_oslo().strftime("%A").lower()
     today_date = _now_oslo().date().isoformat()
     expected = WEEKLY_TEMPLATE.get(today_name, {})
-    entries = sorted([*local_training, *mongo_training], key=lambda x: x.get("timestamp") or x.get("date") or "", reverse=True)
+    entries = [
+        item for item in [*local_training, *mongo_training]
+        if not item.get("strava_id") and item.get("source") != "Strava"
+    ]
+    entries = sorted(entries, key=lambda x: x.get("timestamp") or x.get("date") or "", reverse=True)
     today_entries = [e for e in entries if e.get("date") == today_date]
     lines = [
         "training:",
@@ -1737,10 +1756,14 @@ def _training_router_context(local_training: List[Dict[str, Any]], mongo_trainin
         lines.append("- recent logs: " + "; ".join(recent))
     else:
         lines.append("- no recent workouts logged")
-    lines.append("- Saturday or Sunday can be long run; Sunday still gets recovery-food attention in food planning.")
+    lines.append("- Saturday or Sunday can be long run.")
     return "\n".join(lines)
 
 def _weekly_training_context(training: List[Dict[str, Any]]) -> str:
+    training = [
+        item for item in training
+        if not item.get("strava_id") and item.get("source") != "Strava"
+    ]
     lines = ["training/movement last 7 days:"]
     if not training:
         lines.append("- no workouts logged this week, or tracking may be incomplete")
@@ -1856,7 +1879,6 @@ async def _weekly_analysis_context(text: str) -> str:
     parts = [
         _weekly_training_context(training),
         _budget_cycle_context_from_store(store),
-        _weekly_food_context(store),
         _calendar_events_context(calendar_events),
     ]
     return (
@@ -1884,7 +1906,7 @@ async def _gather_context_v2(text: str) -> str:
     patterns_task = None
     letters_task = None
 
-    if "training" in intent_set or ("food" in intent_set and "week" in lower) or ("planning" in intent_set and not any(i in intent_set for i in ("food", "training", "budget", "calendar"))):
+    if "training" in intent_set or ("planning" in intent_set and not any(i in intent_set for i in ("food", "training", "budget", "calendar"))):
         mongo_training_task = asyncio.create_task(_recent_mongo_docs("training", limit=5))
     if "emotional support" in intent_set or "work stress" in intent_set or ("brain dump" in intent_set and "emotional support" not in intent_set):
         mongo_dumps_task = asyncio.create_task(_recent_mongo_docs("braindumps", limit=8))
@@ -1899,9 +1921,7 @@ async def _gather_context_v2(text: str) -> str:
 
     if "budget" in intent_set:
         context_parts.append(_budget_router_context(text, store=store))
-    if "food" in intent_set or ("planning" in intent_set and any(w in lower for w in ("eat", "food", "meal", "shopping", "grocery"))):
-        context_parts.append(_food_router_context(text, store=store))
-    if "training" in intent_set or ("food" in intent_set and "week" in lower):
+    if "training" in intent_set:
         mongo_training = await mongo_training_task if mongo_training_task else []
         context_parts.append(_training_router_context(store.get("training", [])[-10:], mongo_training, text))
     if "emotional support" in intent_set or "work stress" in intent_set:
@@ -1912,7 +1932,6 @@ async def _gather_context_v2(text: str) -> str:
         if calendar_context:
             context_parts.append(calendar_context)
     if "planning" in intent_set and not any(i in intent_set for i in ("food", "training", "budget", "calendar")):
-        context_parts.append(_food_router_context(text, store=store))
         mongo_training = await mongo_training_task if mongo_training_task else []
         context_parts.append(_training_router_context(store.get("training", [])[-8:], mongo_training, text))
     if "patterns" in intent_set:
@@ -2341,6 +2360,7 @@ async def _strava_import_recent(limit: int = 10, types: Optional[List[str]] = No
     existing_ids = {str(t.get("strava_id")) for t in existing_docs if t.get("strava_id")}
     existing_ids.update({str(t.get("strava_id")) for t in store["training"] if t.get("strava_id")})
     imported = []
+    updated = []
     skipped = 0
     for activity in activities:
         activity_type = (activity.get("type") or activity.get("sport_type") or "").lower()
@@ -2348,23 +2368,35 @@ async def _strava_import_recent(limit: int = 10, types: Optional[List[str]] = No
             skipped += 1
             continue
         strava_id = str(activity.get("id"))
-        if strava_id in existing_ids:
-            skipped += 1
-            continue
         entry = _strava_activity_to_training(activity)
         if not entry:
             skipped += 1
             continue
         try:
-            await db.training.insert_one(entry)
+            await db.training.update_one(
+                {"strava_id": strava_id},
+                {"$set": entry},
+                upsert=True,
+            )
         except Exception as exc:
             logging.exception("mongo unavailable for Strava import save")
             raise HTTPException(status_code=503, detail=f"Could not save imported Strava activity: {exc}")
-        existing_ids.add(strava_id)
-        imported.append(entry)
+        store["training"] = [t for t in store["training"] if str(t.get("strava_id")) != strava_id]
+        store["training"].append(entry)
+        if strava_id in existing_ids:
+            updated.append(entry)
+        else:
+            existing_ids.add(strava_id)
+            imported.append(entry)
     store["training"] = store["training"][-500:]
     _write_life_store(store)
-    return {"imported": imported, "imported_count": len(imported), "skipped_count": skipped}
+    return {
+        "imported": imported,
+        "updated": updated,
+        "imported_count": len(imported),
+        "updated_count": len(updated),
+        "skipped_count": skipped,
+    }
 
 @api_router.get("/strava/import/recent")
 async def strava_import_recent(limit: int = 10, redirect: bool = False):
@@ -2384,6 +2416,7 @@ async def strava_import_recent(limit: int = 10, redirect: bool = False):
         return RedirectResponse(
             f"{FRONTEND_URL}/training?strava_import=done"
             f"&imported={result.get('imported_count', 0)}"
+            f"&updated={result.get('updated_count', 0)}"
             f"&skipped={result.get('skipped_count', 0)}"
         )
     return result
@@ -2557,27 +2590,39 @@ async def _budget_archive_doc(cycle_key: str, store: Optional[Dict[str, Any]] = 
 
 @api_router.get("/budget/v1/archives")
 async def budget_v1_archives(limit: int = 24):
+    store = await _read_persistent_life_store()
+    local_archives = store.get("budget_archives", [])
     try:
-        docs = await db.budget_archives_v1.find({}, {"_id": 0}).sort("start_date", -1).to_list(limit)
+        mongo_docs = await db.budget_archives_v1.find({}, {"_id": 0}).sort("start_date", -1).to_list(limit)
     except Exception as exc:
         logging.exception("mongo unavailable for budget archives read")
-        raise HTTPException(status_code=503, detail=f"Could not load budget archives: {exc}")
+        mongo_docs = []
+    docs = _merge_docs_by_id(mongo_docs, local_archives)
+    docs = sorted(docs, key=lambda x: x.get("start_date", ""), reverse=True)[:limit]
     return {"archives": docs}
 
 @api_router.post("/budget/v1/archive")
 async def budget_v1_archive(req: BudgetArchiveCreate):
     cycle_key = _budget_cycle_key(req.cycle)
     doc = await _budget_archive_doc(cycle_key)
+    safe_doc = _json_safe_doc(doc)
     try:
         await db.budget_archives_v1.update_one(
             {"cycle_key": cycle_key},
-            {"$set": _json_safe_doc(doc)},
+            {"$set": safe_doc},
             upsert=True,
         )
     except Exception as exc:
         logging.exception("mongo unavailable for budget archive write")
         raise HTTPException(status_code=503, detail=f"Could not archive budget cycle: {exc}")
-    return {"archive": doc}
+    store = await _read_persistent_life_store()
+    store["budget_archives"] = [
+        archive for archive in store.get("budget_archives", [])
+        if archive.get("cycle_key") != cycle_key
+    ]
+    store["budget_archives"].append(safe_doc)
+    await _write_persistent_life_store(store)
+    return {"archive": safe_doc}
 
 @api_router.delete("/budget/v1/spending/{entry_id}")
 async def budget_v1_spending_delete(entry_id: str):

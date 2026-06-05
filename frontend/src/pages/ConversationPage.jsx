@@ -90,12 +90,11 @@ Important interpretation rules:
 - Consider recovery, stress, social load, late shifts, sleep disruption, grief/low-capacity periods, and life admin if reflected in the app data.
 
 Include:
-1. Training / movement: completed or not logged, Strava runs, gym sessions, recovery context if visible.
-2. Food consistency: what looks stable, what looks friction-heavy.
-3. Budget/spending: cycle-aware spending overview, category patterns, and gentle observations.
-4. Calendar/planning/recovery notes if useful.
-5. The Real Story This Week: a compassionate synthesis of what the week actually looked like.
-6. One practical adjustment for next week.
+1. Training / movement: completed or not logged, manual gym/run logs, recovery context if visible.
+2. Budget/spending: cycle-aware spending overview, category patterns, and gentle observations.
+3. Calendar/planning/recovery notes if useful.
+4. The Real Story This Week: a compassionate synthesis of what the week actually looked like.
+5. One practical adjustment for next week.
 
 Preferred phrasing:
 - "No workouts logged this week (or tracking may be incomplete)."
@@ -103,7 +102,7 @@ Preferred phrasing:
 - "This may have been a recovery/capacity week rather than avoidance."
 
 Goal: pattern awareness and momentum, not perfection.`
-      : "Give me a monthly summary from the app data. Include training sessions, running volume, long-run/easy-run trend, strength progression, budget income/fixed/flexible/category breakdown, food consistency, what quietly improved, main friction point, and one practical adjustment for next month.";
+      : "Give me a monthly summary from the app data. Include training sessions, running volume, long-run/easy-run trend, strength progression, budget income/fixed/flexible/category breakdown, what quietly improved, main friction point, and one practical adjustment for next month.";
     submit(prompt, "send");
   };
 
@@ -135,7 +134,7 @@ Goal: pattern awareness and momentum, not perfection.`
               {summaryPlaceholder === "weekly" ? "Weekly Summary" : "Monthly Summary"}
             </div>
             <p className="text-sm text-moss-100 leading-relaxed">
-              Placeholder wired. Next pass builds the actual retrieval: training, Strava, budget, food, calendar context, and pattern notes. Receipts first, theatrical nonsense never.
+              Placeholder wired. Next pass builds the actual retrieval: training, Strava, budget, calendar context, and pattern notes. Receipts first, theatrical nonsense never.
             </p>
           </div>
         )}

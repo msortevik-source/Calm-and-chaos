@@ -195,11 +195,12 @@ export default function TrainingPage() {
     }
     if (params.get("strava_import") === "done") {
       const imported = params.get("imported") || "0";
+      const updated = params.get("updated") || "0";
       const skipped = params.get("skipped") || "0";
       setStrava((prev) => ({ ...prev, configured: true, linked: true, checked: true }));
-      setStravaImportNote(`Imported ${imported}. Skipped ${skipped}.`);
+      setStravaImportNote(`Imported ${imported}. Updated ${updated}. Skipped ${skipped}.`);
       toast(`Imported ${imported} from Strava.`, {
-        description: Number(imported) ? "Training log updated." : "Nothing new. Suspiciously calm.",
+        description: Number(imported) || Number(updated) ? "Training log updated." : "Nothing new. Suspiciously calm.",
       });
       window.setTimeout(() => {
         entriesRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });

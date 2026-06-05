@@ -5,7 +5,7 @@ const links = [
   { to: "/", label: "Home", icon: Home, testid: "nav-home" },
   { to: "/conversation", label: "Analysis Corner", icon: BarChart3, testid: "nav-conversation" },
   { to: "/training", label: "Training", icon: Activity, testid: "nav-training" },
-  { to: "/budget", label: "Budget & food", icon: Wallet, testid: "nav-budget" },
+  { to: "/budget", label: "Budget", icon: Wallet, testid: "nav-budget" },
   { to: "/life-upgrades", label: "Life Upgrades", icon: ClipboardList, testid: "nav-life-upgrades" },
   { to: "/letter", label: "Letter", icon: Mail, testid: "nav-letter" },
   { to: "/patterns", label: "Patterns", icon: Sparkles, testid: "nav-patterns" },
