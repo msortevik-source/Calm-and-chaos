@@ -1,7 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   getTemplate,
-  listTraining,
+  getTrainingMonth,
+  listTrainingMonthArchives,
+  archiveTrainingMonth,
   createTraining,
   deleteTraining,
   stravaStatus,
@@ -9,7 +11,7 @@ import {
   API,
 } from "../lib/api";
 import DiscussButton from "../components/DiscussButton";
-import { Activity, Dumbbell, Footprints, Link2, RefreshCw, Save, Trash2, Unlink } from "lucide-react";
+import { Activity, Archive, Dumbbell, Footprints, Link2, RefreshCw, Save, Trash2, Unlink } from "lucide-react";
 import { toast } from "sonner";
 
 const DAY_ORDER = ["monday", "wednesday", "friday"];
@@ -61,6 +63,7 @@ const LOCAL_TEMPLATE = {
 };
 
 const todayIso = () => new Date().toISOString().slice(0, 10);
+const monthKey = (iso = todayIso()) => iso.slice(0, 7);
 const weekdayKey = () => new Date().toLocaleDateString("en-US", { weekday: "long" }).toLowerCase();
 const inputCls = "bg-moss-800/60 border border-moss-700 rounded-xl px-3 py-2 text-sm text-moss-50 placeholder-moss-200/50 outline-none focus:border-amber/50 transition-colors";
 function defaultSession() {
@@ -141,6 +144,10 @@ export default function TrainingPage() {
   const entriesRef = useRef(null);
   const [template, setTemplate] = useState(LOCAL_TEMPLATE);
   const [entries, setEntries] = useState([]);
+  const [archives, setArchives] = useState([]);
+  const [trainingMonth, setTrainingMonth] = useState(monthKey());
+  const [monthSummary, setMonthSummary] = useState({});
+  const [monthPeriod, setMonthPeriod] = useState(null);
   const [session, setSession] = useState(defaultSession());
   const [longRunDay, setLongRunDay] = useState(weekdayKey() === "sunday" ? "sunday" : "saturday");
   const [date, setDate] = useState(todayIso());
@@ -157,29 +164,31 @@ export default function TrainingPage() {
   const run = useMemo(() => workout.run || null, [workout]);
 
   const sortedEntries = useMemo(
-    () => [...entries].sort((a, b) => String(b.timestamp || b.date || "").localeCompare(String(a.timestamp || a.date || ""))),
+    () => [...entries].sort((a, b) => String(b.date || b.timestamp || "").localeCompare(String(a.date || a.timestamp || ""))),
     [entries],
   );
 
-  const load = async () => {
-    try {
-      const [t, e] = await Promise.all([getTemplate(), listTraining()]);
-      setTemplate({ ...LOCAL_TEMPLATE, ...(t.template || {}) });
-      setEntries(e.entries || []);
-    } catch (e) {
-      toast("Training log did not load.", { description: e?.response?.data?.detail || e?.message || "" });
-      const t = await getTemplate().catch(() => ({ template: {} }));
-      setTemplate({ ...LOCAL_TEMPLATE, ...(t.template || {}) });
-      setEntries([]);
+  const load = useCallback(async () => {
+    const [t, monthData, archiveData, s] = await Promise.all([
+      getTemplate().catch(() => ({ template: {} })),
+      getTrainingMonth(trainingMonth).catch((e) => ({ error: e, entries: [], summary: {}, period: null })),
+      listTrainingMonthArchives().catch(() => ({ archives: [] })),
+      stravaStatus().catch(() => null),
+    ]);
+    setTemplate({ ...LOCAL_TEMPLATE, ...(t.template || {}) });
+    if (monthData.error) {
+      toast("Training log did not load.", { description: monthData.error?.response?.data?.detail || monthData.error?.message || "" });
     }
-
-    const s = await stravaStatus().catch(() => null);
+    setEntries(monthData.entries || []);
+    setMonthSummary(monthData.summary || {});
+    setMonthPeriod(monthData.period || null);
+    setArchives(archiveData.archives || []);
     if (s) {
       setStrava({ ...s, checked: true });
     } else {
       setStrava((prev) => ({ ...prev, checked: true }));
     }
-  };
+  }, [trainingMonth]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -220,7 +229,7 @@ export default function TrainingPage() {
       window.history.replaceState({}, "", window.location.pathname);
     }
     load();
-  }, []);
+  }, [load]);
 
   useEffect(() => {
     const next = {};
@@ -307,7 +316,12 @@ export default function TrainingPage() {
       }
 
       await Promise.all(tasks);
-      await load();
+      const savedMonth = monthKey(date);
+      if (savedMonth !== trainingMonth) {
+        setTrainingMonth(savedMonth);
+      } else {
+        await load();
+      }
       toast("Saved.", { description: "Continue, not start over." });
     } catch (e) {
       toast("Couldn't save workout.", { description: e?.response?.data?.detail || e?.message || "No useful error returned." });
@@ -322,6 +336,25 @@ export default function TrainingPage() {
       load();
     } catch {
       toast("Couldn't delete that.");
+    }
+  };
+
+  const archiveCurrentMonth = async () => {
+    setBusy(true);
+    try {
+      const res = await archiveTrainingMonth({ month: trainingMonth });
+      if (res.archive) {
+        setArchives((prev) => [
+          res.archive,
+          ...prev.filter((item) => item.month !== res.archive.month),
+        ]);
+      }
+      await load();
+      toast("Training month archived.", { description: "One tidy dropdown. Suspiciously adult." });
+    } catch (e) {
+      toast("Training month did not archive.", { description: e?.response?.data?.detail || e?.message || "No useful error returned." });
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -355,6 +388,46 @@ export default function TrainingPage() {
       <div className="mb-10">
         <div className="text-xs uppercase tracking-[0.25em] text-moss-200/70 mb-2">Future me already prepared this</div>
         <h1 className="font-heading text-4xl md:text-5xl text-moss-50">Training</h1>
+      </div>
+
+      <div className="warm-card rounded-3xl p-5 mb-8" data-testid="training-month-overview">
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+          <div>
+            <div className="text-xs uppercase tracking-[0.25em] text-moss-200/70 mb-2">Calendar month</div>
+            <h2 className="font-heading text-2xl text-moss-50">{monthPeriod?.label || trainingMonth}</h2>
+            <p className="text-sm text-moss-200 mt-1">
+              {monthPeriod?.start_date || `${trainingMonth}-01`} to {monthPeriod?.end_date || "month end"}
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <input data-testid="training-month" type="month" value={trainingMonth} onChange={(e) => setTrainingMonth(e.target.value)} className={inputCls} />
+            <button data-testid="training-archive-month" disabled={busy} onClick={archiveCurrentMonth} className="pill-btn primary rounded-full px-5 py-2 text-xs inline-flex items-center gap-2 disabled:opacity-40">
+              <Archive size={13} /> Save month
+            </button>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mt-5">
+          <div className="rounded-2xl border border-moss-700/60 bg-moss-800/35 p-3">
+            <div className="text-[10px] uppercase tracking-[0.2em] text-moss-200/70">sessions</div>
+            <div className="font-heading text-2xl text-moss-50">{monthSummary.total_sessions || 0}</div>
+          </div>
+          <div className="rounded-2xl border border-moss-700/60 bg-moss-800/35 p-3">
+            <div className="text-[10px] uppercase tracking-[0.2em] text-moss-200/70">runs</div>
+            <div className="font-heading text-2xl text-moss-50">{monthSummary.run_sessions || 0}</div>
+          </div>
+          <div className="rounded-2xl border border-moss-700/60 bg-moss-800/35 p-3">
+            <div className="text-[10px] uppercase tracking-[0.2em] text-moss-200/70">strength</div>
+            <div className="font-heading text-2xl text-moss-50">{monthSummary.strength_sessions || 0}</div>
+          </div>
+          <div className="rounded-2xl border border-moss-700/60 bg-moss-800/35 p-3">
+            <div className="text-[10px] uppercase tracking-[0.2em] text-moss-200/70">km</div>
+            <div className="font-heading text-2xl text-moss-50">{monthSummary.running_volume_km || 0}</div>
+          </div>
+          <div className="rounded-2xl border border-moss-700/60 bg-moss-800/35 p-3">
+            <div className="text-[10px] uppercase tracking-[0.2em] text-moss-200/70">days</div>
+            <div className="font-heading text-2xl text-moss-50">{monthSummary.training_days || 0}</div>
+          </div>
+        </div>
       </div>
 
       <div className="warm-card rounded-3xl p-6 mb-8" data-testid="weekly-template">
@@ -482,14 +555,14 @@ export default function TrainingPage() {
             <div className="text-xs uppercase tracking-[0.25em] text-moss-200/70 mb-2">Receipts</div>
             <h2 className="font-heading text-3xl text-moss-50">Training log</h2>
           </div>
-          <div className="text-xs text-moss-200">{entries.length} saved</div>
+          <div className="text-xs text-moss-200">{entries.length} saved this month</div>
         </div>
         {entries.length === 0 && (
           <div className="warm-card rounded-2xl p-4 text-sm text-moss-200">
             No training entries visible yet.
           </div>
         )}
-        {entries.slice(0, 16).map((entry) => (
+        {sortedEntries.slice(0, 24).map((entry) => (
           <div key={entry.id} className="warm-card rounded-2xl p-4 flex items-start gap-4">
             <div className="text-amber font-heading text-sm w-20 shrink-0">{entry.date || "-"}</div>
             <div className="flex-1 min-w-0">
@@ -528,6 +601,54 @@ export default function TrainingPage() {
             </div>
           </div>
         ))}
+      </div>
+
+      <div className="warm-card rounded-3xl p-6 mt-8" data-testid="training-month-archives">
+        <div className="flex items-center gap-2 mb-4">
+          <Archive size={16} className="text-amber" />
+          <h2 className="font-heading text-2xl text-moss-50">Training month log</h2>
+        </div>
+        {archives.length === 0 && (
+          <p className="text-sm text-moss-200 italic">No saved training months yet.</p>
+        )}
+        <div className="space-y-3">
+          {archives.map((archive) => {
+            const summary = archive.summary || {};
+            const archiveEntries = archive.entries || [];
+            return (
+              <details key={archive.month || archive.id} className="rounded-2xl border border-moss-700/70 bg-moss-800/35 p-4">
+                <summary className="cursor-pointer list-none">
+                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+                    <div>
+                      <div className="font-heading text-xl text-moss-50">{archive.month_name || archive.month}</div>
+                      <div className="text-xs text-moss-200">{archive.start_date} - {archive.end_date}</div>
+                    </div>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs text-moss-100">
+                      <span>Sessions <b className="text-amber">{summary.total_sessions || 0}</b></span>
+                      <span>Runs <b className="text-amber">{summary.run_sessions || 0}</b></span>
+                      <span>Strength <b className="text-amber">{summary.strength_sessions || 0}</b></span>
+                      <span>Km <b className="text-amber">{summary.running_volume_km || 0}</b></span>
+                    </div>
+                  </div>
+                </summary>
+                <div className="mt-4 max-h-80 overflow-auto space-y-2 pr-1">
+                  {archiveEntries.map((entry) => (
+                    <div key={entry.id} className="grid grid-cols-[82px_1fr] gap-2 text-sm text-moss-100">
+                      <span className="text-amber">{entry.date}</span>
+                      <span>
+                        <span className="capitalize">{entry.kind}</span>
+                        {entry.session_name ? ` - ${entry.session_name}` : ""}
+                        {entry.distance_km ? ` - ${entry.distance_km} km` : ""}
+                        {entry.duration_min ? ` - ${entry.duration_min} min` : ""}
+                      </span>
+                    </div>
+                  ))}
+                  {archiveEntries.length === 0 && <div className="text-sm text-moss-200 italic">No entries in this saved month.</div>}
+                </div>
+              </details>
+            );
+          })}
+        </div>
       </div>
     </div>
   );

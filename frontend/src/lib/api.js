@@ -23,6 +23,9 @@ export const deleteBrainDump = (id) => api.delete(`/braindump/${id}`).then(r => 
 
 export const getTemplate = () => api.get("/training/template").then(r => r.data);
 export const listTraining = () => api.get("/training").then(r => r.data);
+export const getTrainingMonth = (month) => api.get(`/training/month${month ? `?month=${month}` : ""}`).then(r => r.data);
+export const listTrainingMonthArchives = () => api.get("/training/month/archives").then(r => r.data);
+export const archiveTrainingMonth = (payload) => api.post("/training/month/archive", payload).then(r => r.data);
 export const createTraining = (payload) => api.post("/training", payload).then(r => r.data);
 export const deleteTraining = (id) => api.delete(`/training/${id}`).then(r => r.data);
 export const stravaStatus = () => api.get("/strava/status").then(r => r.data);

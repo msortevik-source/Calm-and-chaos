@@ -150,6 +150,9 @@ class StravaImportRequest(BaseModel):
     limit: int = 10
     types: Optional[List[str]] = None
 
+class TrainingArchiveCreate(BaseModel):
+    month: Optional[str] = None
+
 # Budget
 class BudgetCreate(BaseModel):
     item: str
@@ -428,6 +431,32 @@ SNACK_TEMPLATES = [
 def _month_key(value: Optional[str] = None) -> str:
     return _budget_cycle_key(value)
 
+def _calendar_month_key(value: Optional[str] = None) -> str:
+    if value:
+        raw = str(value)
+        if len(raw) >= 10:
+            day = date_cls.fromisoformat(raw[:10])
+            return f"{day.year}-{day.month:02d}"
+        return raw[:7]
+    day = _now_oslo().date()
+    return f"{day.year}-{day.month:02d}"
+
+def _calendar_month_bounds(month_key: str) -> Dict[str, str]:
+    year, month_num = [int(p) for p in month_key.split("-")]
+    start = date_cls(year, month_num, 1)
+    if month_num == 12:
+        next_start = date_cls(year + 1, 1, 1)
+    else:
+        next_start = date_cls(year, month_num + 1, 1)
+    end = next_start - timedelta(days=1)
+    return {
+        "key": month_key,
+        "start_date": start.isoformat(),
+        "end_date": end.isoformat(),
+        "label": f"{start.strftime('%B %Y')}",
+        "days": (end - start).days + 1,
+    }
+
 def _budget_cycle_key(value: Optional[str] = None) -> str:
     if value:
         raw = str(value)
@@ -511,7 +540,7 @@ def _days_in_month(month: str) -> int:
     return (nxt - date_cls(year, month_num, 1)).days
 
 def _empty_life_store() -> Dict[str, Any]:
-    return {"budget_setups": {}, "budget_archives": [], "spending": [], "spending_checkins": [], "food_plans": {}, "braindumps": [], "training": [], "life_upgrades": []}
+    return {"budget_setups": {}, "budget_archives": [], "training_archives": [], "spending": [], "spending_checkins": [], "food_plans": {}, "braindumps": [], "training": [], "life_upgrades": []}
 
 def _read_life_store() -> Dict[str, Any]:
     if not LOCAL_LIFE_FILE.exists():
@@ -522,6 +551,7 @@ def _read_life_store() -> Dict[str, Any]:
             return _empty_life_store()
         data.setdefault("budget_setups", {})
         data.setdefault("budget_archives", [])
+        data.setdefault("training_archives", [])
         data.setdefault("spending", [])
         data.setdefault("spending_checkins", [])
         data.setdefault("food_plans", {})
@@ -556,7 +586,7 @@ def _merge_life_stores(mongo_store: Optional[Dict[str, Any]], local_store: Optio
     merged = _empty_life_store()
     merged["budget_setups"] = {**local_store.get("budget_setups", {}), **mongo_store.get("budget_setups", {})}
     merged["food_plans"] = {**local_store.get("food_plans", {}), **mongo_store.get("food_plans", {})}
-    for key in ("budget_archives", "spending", "spending_checkins", "braindumps", "training", "life_upgrades"):
+    for key in ("budget_archives", "training_archives", "spending", "spending_checkins", "braindumps", "training", "life_upgrades"):
         merged[key] = _merge_docs_by_id(mongo_store.get(key, []), local_store.get(key, []))
     return merged
 
@@ -598,6 +628,13 @@ def _append_local_collection(name: str, doc: Dict[str, Any]):
     store[name].append({k: v for k, v in doc.items() if k != "_id"})
     store[name] = store[name][-500:]
     _write_life_store(store)
+
+def _date_in_calendar_month(date_value: Optional[str], month_key: str) -> bool:
+    if not date_value:
+        return False
+    bounds = _calendar_month_bounds(month_key)
+    day = str(date_value)[:10]
+    return bounds["start_date"] <= day <= bounds["end_date"]
 
 def _delete_local_collection(name: str, entry_id: str):
     store = _read_life_store()
@@ -2207,12 +2244,13 @@ async def training_create(req: TrainingCreate):
     except Exception as exc:
         logging.exception("mongo unavailable for training save")
         raise HTTPException(status_code=503, detail=f"Could not save training: {exc}")
+    _append_local_collection("training", doc)
     return entry
 
 @api_router.get("/training")
 async def training_list(limit: int = 100):
     try:
-        docs = await db.training.find({}, {"_id": 0}).sort("timestamp", -1).to_list(limit)
+        docs = await db.training.find({}, {"_id": 0}).sort("date", -1).to_list(limit)
     except Exception:
         logging.warning("mongo unavailable for training list; using local fallback")
         docs = _local_collection("training", limit=limit)
@@ -2221,8 +2259,101 @@ async def training_list(limit: int = 100):
     for doc in local_docs:
         if doc.get("id") not in seen:
             docs.append(doc)
-    docs = sorted(docs, key=lambda x: x.get("timestamp", ""), reverse=True)[:limit]
+    docs = sorted(docs, key=lambda x: (x.get("date") or "", x.get("timestamp") or ""), reverse=True)[:limit]
     return {"entries": docs}
+
+def _training_summary(entries: List[Dict[str, Any]]) -> Dict[str, Any]:
+    run_entries = [e for e in entries if e.get("kind") == "run"]
+    strength_entries = [e for e in entries if e.get("kind") == "strength"]
+    total_km = round(sum(float(e.get("distance_km") or 0) for e in run_entries), 2)
+    avg_hr_values = [int(e.get("avg_hr")) for e in run_entries if e.get("avg_hr")]
+    return {
+        "total_sessions": len(entries),
+        "run_sessions": len(run_entries),
+        "strength_sessions": len(strength_entries),
+        "running_volume_km": total_km,
+        "avg_run_hr": round(sum(avg_hr_values) / len(avg_hr_values), 1) if avg_hr_values else None,
+        "training_days": len({e.get("date") for e in entries if e.get("date")}),
+    }
+
+async def _training_month_entries(month: str, limit: int = 300) -> List[Dict[str, Any]]:
+    month = _calendar_month_key(month)
+    bounds = _calendar_month_bounds(month)
+    try:
+        docs = await db.training.find(
+            {"date": {"$gte": bounds["start_date"], "$lte": bounds["end_date"]}},
+            {"_id": 0},
+        ).sort("date", 1).to_list(limit)
+    except Exception:
+        logging.warning("mongo unavailable for training month; using local fallback")
+        docs = []
+    local_docs = [
+        doc for doc in _local_collection("training", limit=limit)
+        if _date_in_calendar_month(doc.get("date"), month)
+    ]
+    merged = _merge_docs_by_id(docs, local_docs)
+    return sorted(merged, key=lambda x: (x.get("date") or "", x.get("timestamp") or ""))
+
+@api_router.get("/training/month")
+async def training_month(month: Optional[str] = None):
+    month_key = _calendar_month_key(month)
+    bounds = _calendar_month_bounds(month_key)
+    entries = await _training_month_entries(month_key)
+    return {
+        "month": month_key,
+        "period": bounds,
+        "entries": entries,
+        "summary": _training_summary(entries),
+    }
+
+@api_router.get("/training/month/archives")
+async def training_month_archives(limit: int = 24):
+    store = _read_life_store()
+    local_archives = store.get("training_archives", [])
+    try:
+        mongo_docs = await db.training_archives_v1.find({}, {"_id": 0}).sort("start_date", -1).to_list(limit)
+    except Exception:
+        logging.warning("mongo unavailable for training archives; using local fallback")
+        mongo_docs = []
+    docs = _merge_docs_by_id(mongo_docs, local_archives)
+    docs = sorted(docs, key=lambda x: x.get("start_date", ""), reverse=True)[:limit]
+    return {"archives": docs}
+
+@api_router.post("/training/month/archive")
+async def training_month_archive(req: TrainingArchiveCreate):
+    month_key = _calendar_month_key(req.month)
+    bounds = _calendar_month_bounds(month_key)
+    entries = await _training_month_entries(month_key)
+    doc = {
+        "id": f"training-month-{month_key}",
+        "month": month_key,
+        "month_name": bounds["label"],
+        "period": bounds,
+        "start_date": bounds["start_date"],
+        "end_date": bounds["end_date"],
+        "entries": entries,
+        "summary": _training_summary(entries),
+        "archived": True,
+        "archived_at": datetime.now(timezone.utc).isoformat(),
+    }
+    safe_doc = _json_safe_doc(doc)
+    try:
+        await db.training_archives_v1.update_one(
+            {"month": month_key},
+            {"$set": safe_doc},
+            upsert=True,
+        )
+    except Exception as exc:
+        logging.exception("mongo unavailable for training month archive write")
+        raise HTTPException(status_code=503, detail=f"Could not archive training month: {exc}")
+    store = _read_life_store()
+    store["training_archives"] = [
+        archive for archive in store.get("training_archives", [])
+        if archive.get("month") != month_key
+    ]
+    store["training_archives"].append(safe_doc)
+    _write_life_store(store)
+    return {"archive": safe_doc}
 
 @api_router.delete("/training/{entry_id}")
 async def training_delete(entry_id: str):
@@ -2462,7 +2593,7 @@ async def budget_delete(entry_id: str):
 async def budget_v1(month: Optional[str] = None, cycle: Optional[str] = None):
     month = _budget_cycle_key(cycle or month)
     cycle_info = _budget_cycle_bounds(month)
-    store = await _read_persistent_life_store()
+    store = _read_life_store()
     setup = await _budget_setup_persistent(month, store)
     spending = await _spending_persistent(month, store)
     checkins = await _spending_checkins_persistent(month, store)
@@ -2482,7 +2613,7 @@ async def budget_v1(month: Optional[str] = None, cycle: Optional[str] = None):
 async def budget_v1_setup(req: BudgetSetup):
     month = _budget_cycle_key(req.month)
     cycle_info = _budget_cycle_bounds(month)
-    store = await _read_persistent_life_store()
+    store = _read_life_store()
     setup = {
         "month": month,
         "cycle": cycle_info,
@@ -2524,7 +2655,7 @@ async def budget_v1_spending(req: SpendingCreate):
     except Exception as exc:
         logging.exception("mongo unavailable for spending write")
         raise HTTPException(status_code=503, detail=f"Could not save spending: {exc}")
-    store = await _read_persistent_life_store()
+    store = _read_life_store()
     store["spending"].append(doc)
     store.setdefault("spending_checkins", [])
     if entry.date not in {c.get("date") for c in store["spending_checkins"]}:
@@ -2540,7 +2671,7 @@ async def budget_v1_spending(req: SpendingCreate):
 @api_router.post("/budget/v1/checkin")
 async def budget_v1_checkin(req: SpendingCheckinCreate):
     entry_date = req.date or datetime.now(timezone.utc).date().isoformat()
-    store = await _read_persistent_life_store()
+    store = _read_life_store()
     store.setdefault("spending_checkins", [])
     if entry_date not in {c.get("date") for c in store["spending_checkins"]}:
         checkin = {
@@ -2565,7 +2696,7 @@ async def budget_v1_checkin(req: SpendingCheckinCreate):
 async def _budget_archive_doc(cycle_key: str, store: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     cycle_key = _budget_cycle_key(cycle_key)
     cycle_info = _budget_cycle_bounds(cycle_key)
-    store = store or await _read_persistent_life_store()
+    store = store or _read_life_store()
     setup = await _budget_setup_persistent(cycle_key, store)
     spending = await _spending_persistent(cycle_key, store)
     checkins = await _spending_checkins_persistent(cycle_key, store)
@@ -2590,7 +2721,7 @@ async def _budget_archive_doc(cycle_key: str, store: Optional[Dict[str, Any]] = 
 
 @api_router.get("/budget/v1/archives")
 async def budget_v1_archives(limit: int = 24):
-    store = await _read_persistent_life_store()
+    store = _read_life_store()
     local_archives = store.get("budget_archives", [])
     try:
         mongo_docs = await db.budget_archives_v1.find({}, {"_id": 0}).sort("start_date", -1).to_list(limit)
@@ -2615,7 +2746,7 @@ async def budget_v1_archive(req: BudgetArchiveCreate):
     except Exception as exc:
         logging.exception("mongo unavailable for budget archive write")
         raise HTTPException(status_code=503, detail=f"Could not archive budget cycle: {exc}")
-    store = await _read_persistent_life_store()
+    store = _read_life_store()
     store["budget_archives"] = [
         archive for archive in store.get("budget_archives", [])
         if archive.get("cycle_key") != cycle_key
@@ -2631,7 +2762,7 @@ async def budget_v1_spending_delete(entry_id: str):
     except Exception as exc:
         logging.exception("mongo unavailable for spending delete")
         raise HTTPException(status_code=503, detail=f"Could not delete spending: {exc}")
-    store = await _read_persistent_life_store()
+    store = _read_life_store()
     store["spending"] = [s for s in store["spending"] if s.get("id") != entry_id]
     await _write_persistent_life_store(store)
     return {"ok": True}
@@ -3288,6 +3419,23 @@ app.add_middleware(
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+@app.on_event("startup")
+async def ensure_indexes():
+    try:
+        await asyncio.gather(
+            db.training.create_index([("date", -1), ("timestamp", -1)]),
+            db.training.create_index("strava_id", sparse=True),
+            db.training_archives_v1.create_index("month", unique=True),
+            db.training_archives_v1.create_index("start_date"),
+            db.spending_v1.create_index([("date", -1), ("timestamp", -1)]),
+            db.spending_checkins_v1.create_index("date", unique=True),
+            db.budget_archives_v1.create_index("cycle_key", unique=True),
+            db.budget_archives_v1.create_index("start_date"),
+            db.budget_setups_v1.create_index("month", unique=True),
+        )
+    except Exception:
+        logging.exception("index creation skipped/failed")
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
