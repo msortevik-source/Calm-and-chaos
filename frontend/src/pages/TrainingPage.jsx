@@ -384,16 +384,16 @@ export default function TrainingPage() {
   };
 
   return (
-    <div className="px-6 md:px-12 py-10 md:py-16 max-w-6xl mx-auto" data-testid="training-page">
+    <div className="px-5 md:px-12 py-7 md:py-16 max-w-6xl mx-auto" data-testid="training-page">
       <div className="mb-10">
-        <div className="text-xs uppercase tracking-[0.25em] text-moss-200/70 mb-2">Future me already prepared this</div>
-        <h1 className="font-heading text-4xl md:text-5xl text-moss-50">Training</h1>
+        <div className="text-xs uppercase tracking-[0.25em] text-moss-200/70 mb-2">Trail records</div>
+        <h1 className="font-heading text-4xl md:text-5xl text-moss-50">Training Station</h1>
       </div>
 
       <div className="warm-card rounded-3xl p-5 mb-8" data-testid="training-month-overview">
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
           <div>
-            <div className="text-xs uppercase tracking-[0.25em] text-moss-200/70 mb-2">Calendar month</div>
+            <div className="text-xs uppercase tracking-[0.25em] text-moss-200/70 mb-2">Expedition month</div>
             <h2 className="font-heading text-2xl text-moss-50">{monthPeriod?.label || trainingMonth}</h2>
             <p className="text-sm text-moss-200 mt-1">
               {monthPeriod?.start_date || `${trainingMonth}-01`} to {monthPeriod?.end_date || "month end"}
@@ -402,7 +402,7 @@ export default function TrainingPage() {
           <div className="flex flex-wrap gap-2">
             <input data-testid="training-month" type="month" value={trainingMonth} onChange={(e) => setTrainingMonth(e.target.value)} className={inputCls} />
             <button data-testid="training-archive-month" disabled={busy} onClick={archiveCurrentMonth} className="pill-btn primary rounded-full px-5 py-2 text-xs inline-flex items-center gap-2 disabled:opacity-40">
-              <Archive size={13} /> Save month
+              <Archive size={13} /> Store log
             </button>
           </div>
         </div>
@@ -432,7 +432,7 @@ export default function TrainingPage() {
 
       <div className="warm-card rounded-3xl p-6 mb-8" data-testid="weekly-template">
         <div className="text-xs uppercase tracking-[0.25em] text-moss-200/70 mb-4 flex items-center gap-2">
-          <Activity size={14} /> Choose session
+          <Activity size={14} /> Choose trail
         </div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {SESSION_OPTIONS.map((option) => (
@@ -444,7 +444,7 @@ export default function TrainingPage() {
             >
               <div className="font-heading text-moss-50 text-sm">{option.label}</div>
               <div className="text-xs text-moss-200 mt-1 leading-snug">{option.sub}</div>
-              {session === option.id && <div className="text-[10px] uppercase tracking-[0.18em] text-amber mt-3">Logging below</div>}
+              {session === option.id && <div className="text-[10px] uppercase tracking-[0.18em] text-amber mt-3">Record below</div>}
             </button>
           ))}
         </div>
@@ -454,7 +454,7 @@ export default function TrainingPage() {
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-5">
           <div>
             <div className="text-xs uppercase tracking-[0.25em] text-moss-200/70 mb-2 flex items-center gap-2">
-              <Dumbbell size={14} /> Prepared session
+              <Dumbbell size={14} /> Current entry
             </div>
             <h2 className="font-heading text-3xl text-moss-50">{workout.focus || "Prepared workout"}</h2>
           </div>
@@ -503,7 +503,7 @@ export default function TrainingPage() {
 
         <div className="mt-5 flex justify-end">
           <button data-testid="training-save" disabled={busy} onClick={saveWorkout} className="pill-btn primary rounded-full px-5 py-2 text-xs inline-flex items-center gap-2 disabled:opacity-40">
-            <Save size={13} /> Save session
+            <Save size={13} /> Save entry
           </button>
         </div>
       </div>
@@ -512,7 +512,7 @@ export default function TrainingPage() {
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <div className="text-xs uppercase tracking-[0.25em] text-moss-200/70 mb-2 flex items-center gap-2">
-              <Activity size={14} /> Strava
+              <Activity size={14} /> Trail import
             </div>
             <h2 className="font-heading text-2xl text-moss-50">{!strava.checked ? "Checking connection" : strava.linked ? "Connected" : "Connect runs"}</h2>
             <p className="text-sm text-moss-200 mt-1">
@@ -520,7 +520,7 @@ export default function TrainingPage() {
                 ? "Asking the backend if Strava is already linked."
                 : strava.linked
                 ? `Linked${strava.athlete?.firstname ? ` as ${strava.athlete.firstname}` : ""}. Import recent activities when you want the log caught up.`
-                : "Pull recent activities into training without manually typing every kilometer like it is 2009."}
+                : "Pull recent trail records into the log without manually typing every kilometer."}
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -552,8 +552,8 @@ export default function TrainingPage() {
       <div ref={entriesRef} className="space-y-3 scroll-mt-32" data-testid="training-entries">
         <div className="flex items-end justify-between gap-3">
           <div>
-            <div className="text-xs uppercase tracking-[0.25em] text-moss-200/70 mb-2">Receipts</div>
-            <h2 className="font-heading text-3xl text-moss-50">Training log</h2>
+            <div className="text-xs uppercase tracking-[0.25em] text-moss-200/70 mb-2">Recorded movement</div>
+            <h2 className="font-heading text-3xl text-moss-50">Trail Records</h2>
           </div>
           <div className="text-xs text-moss-200">{entries.length} saved this month</div>
         </div>
@@ -606,7 +606,7 @@ export default function TrainingPage() {
       <div className="warm-card rounded-3xl p-6 mt-8" data-testid="training-month-archives">
         <div className="flex items-center gap-2 mb-4">
           <Archive size={16} className="text-amber" />
-          <h2 className="font-heading text-2xl text-moss-50">Training month log</h2>
+          <h2 className="font-heading text-2xl text-moss-50">Expedition shelf</h2>
         </div>
         {archives.length === 0 && (
           <p className="text-sm text-moss-200 italic">No saved training months yet.</p>

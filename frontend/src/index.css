@@ -18,7 +18,7 @@ html, body, #root {
 
 body {
   margin: 0;
-  background-color: #2B2A22;
+  background-color: #13282B;
   color: #F1E8D8;
   font-family: 'Manrope', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
@@ -29,24 +29,24 @@ body {
 
 @layer base {
   :root {
-    --background: 44 11% 15%;
+    --background: 187 39% 12%;
     --foreground: 37 38% 90%;
-    --card: 41 18% 25%;
+    --card: 38 20% 28%;
     --card-foreground: 37 38% 90%;
     --popover: 112 11% 22%;
     --popover-foreground: 37 38% 90%;
-    --primary: 91 16% 28%;
+    --primary: 184 34% 24%;
     --primary-foreground: 37 38% 90%;
     --secondary: 112 10% 24%;
     --secondary-foreground: 37 38% 90%;
     --muted: 112 10% 24%;
     --muted-foreground: 42 16% 68%;
-    --accent: 30 56% 61%;
+    --accent: 26 57% 56%;
     --accent-foreground: 105 14% 12%;
     --destructive: 8 60% 45%;
     --destructive-foreground: 37 38% 90%;
-    --border: 35 21% 38%;
-    --input: 42 15% 23%;
+    --border: 31 24% 39%;
+    --input: 188 28% 18%;
     --ring: 28 51% 64%;
     --radius: 1rem;
   }
@@ -65,9 +65,9 @@ body {
   pointer-events: none;
   z-index: 0;
   background:
-    radial-gradient(52% 36% at 16% 0%, rgba(217, 155, 84, 0.16) 0%, transparent 62%),
-    radial-gradient(38% 34% at 92% 12%, rgba(137, 82, 49, 0.13) 0%, transparent 66%),
-    linear-gradient(135deg, rgba(61, 72, 52, 0.74) 0%, rgba(42, 42, 34, 0.96) 42%, rgba(49, 37, 31, 0.92) 100%),
+    radial-gradient(54% 34% at 16% 0%, rgba(207, 129, 69, 0.18) 0%, transparent 62%),
+    radial-gradient(42% 36% at 88% 18%, rgba(24, 106, 111, 0.24) 0%, transparent 68%),
+    linear-gradient(135deg, rgba(21, 65, 68, 0.88) 0%, rgba(16, 37, 40, 0.98) 46%, rgba(37, 34, 29, 0.96) 100%),
     repeating-linear-gradient(90deg, rgba(255,255,255,0.018) 0 1px, transparent 1px 38px),
     repeating-linear-gradient(0deg, rgba(0,0,0,0.035) 0 1px, transparent 1px 34px);
 }
@@ -100,6 +100,10 @@ body {
 /* Selection */
 ::selection { background: rgba(212, 163, 115, 0.32); color: #F1E8D8; }
 
+.content-layer {
+  overflow-x: hidden;
+}
+
 /* Field-journal navigation */
 .nav-link {
   position: relative;
@@ -120,25 +124,26 @@ body {
 .nav-link:hover,
 .nav-link.active {
   color: #F7E8C9;
-  background: rgba(212, 163, 115, 0.075);
+  background: rgba(207, 129, 69, 0.10);
 }
 
 /* Stamped controls */
 .pill-btn {
-  border: 1px solid rgba(166, 103, 61, 0.58);
+  min-height: 44px;
+  border: 1px solid rgba(185, 103, 57, 0.62);
   color: #F7E8C9;
   background:
-    linear-gradient(180deg, rgba(79, 55, 39, 0.78), rgba(53, 43, 33, 0.78));
+    linear-gradient(180deg, rgba(31, 65, 67, 0.88), rgba(23, 48, 50, 0.88));
   box-shadow: 0 1px 0 rgba(255, 239, 202, 0.12) inset, 0 2px 0 rgba(29, 22, 18, 0.38);
   text-transform: uppercase;
   letter-spacing: 0.08em;
   transition: background-color 0.25s ease, border-color 0.25s ease, transform 0.2s ease, color 0.25s ease;
 }
-.pill-btn:hover { background: rgba(149, 84, 45, 0.48); border-color: rgba(226, 168, 95, 0.72); }
+.pill-btn:hover { background: rgba(39, 86, 88, 0.74); border-color: rgba(226, 151, 87, 0.74); }
 .pill-btn:active { transform: translateY(1px); }
 .pill-btn.primary {
-  background: linear-gradient(180deg, #8A5A38 0%, #68432D 100%);
-  border-color: #C89157;
+  background: linear-gradient(180deg, #9A5F37 0%, #6E3F2B 100%);
+  border-color: #D18A52;
   color: #FFF2D0;
 }
 .pill-btn.primary:hover { background: linear-gradient(180deg, #9A6740 0%, #714A32 100%); }
@@ -148,9 +153,9 @@ body {
   position: relative;
   isolation: isolate;
   background:
-    linear-gradient(180deg, rgba(88, 72, 50, 0.94) 0%, rgba(61, 55, 42, 0.96) 100%),
-    repeating-linear-gradient(0deg, rgba(244, 221, 174, 0.04) 0 1px, transparent 1px 18px);
-  border: 1px solid rgba(188, 139, 83, 0.55);
+    linear-gradient(180deg, rgba(75, 68, 50, 0.94) 0%, rgba(45, 63, 60, 0.96) 100%),
+    repeating-linear-gradient(0deg, rgba(244, 221, 174, 0.05) 0 1px, transparent 1px 18px);
+  border: 1px solid rgba(193, 139, 82, 0.52);
   border-radius: 0.75rem !important;
   box-shadow:
     0 1px 0 rgba(255, 242, 202, 0.12) inset,
@@ -172,6 +177,18 @@ body {
     linear-gradient(90deg, rgba(221, 187, 132, 0.46), rgba(239, 209, 154, 0.32));
   box-shadow: 0 1px 3px rgba(26, 18, 12, 0.25);
   transform: rotate(-1.2deg);
+}
+
+.warm-card .bg-moss-800\/35,
+.warm-card .bg-moss-800\/50,
+.warm-card .bg-moss-900\/40 {
+  background-color: rgba(16, 42, 45, 0.46);
+}
+
+.warm-card .border-moss-700\/70,
+.warm-card .border-moss-700\/60,
+.warm-card .border-moss-700 {
+  border-color: rgba(171, 116, 74, 0.38);
 }
 
 .warm-card::after {
@@ -219,33 +236,101 @@ details[open] summary::after {
 
 .house-spirit-note {
   border: 1px solid rgba(212,163,115,0.38);
-  background: rgba(45, 35, 27, 0.72);
+  background: rgba(17, 44, 47, 0.76);
   color: #EBD5AE;
   box-shadow: 0 1px 0 rgba(255,255,255,0.06) inset;
 }
 
 .wood-rail {
   background:
-    linear-gradient(90deg, rgba(47, 35, 26, 0.98), rgba(70, 49, 34, 0.96)),
+    linear-gradient(90deg, rgba(16, 40, 43, 0.98), rgba(24, 58, 61, 0.96)),
     repeating-linear-gradient(90deg, rgba(255,255,255,0.035) 0 2px, transparent 2px 18px);
-  border-color: rgba(157, 105, 65, 0.55);
+  border-color: rgba(168, 102, 63, 0.55);
+}
+
+.bottom-room-nav {
+  position: fixed;
+  left: max(10px, env(safe-area-inset-left));
+  right: max(10px, env(safe-area-inset-right));
+  bottom: max(10px, env(safe-area-inset-bottom));
+  z-index: 40;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.35rem;
+  padding: 0.45rem;
+  border: 1px solid rgba(193, 139, 82, 0.42);
+  border-radius: 1rem;
+  background:
+    linear-gradient(180deg, rgba(18, 43, 46, 0.96), rgba(12, 31, 34, 0.98)),
+    repeating-linear-gradient(90deg, rgba(255,255,255,0.035) 0 1px, transparent 1px 16px);
+  box-shadow: 0 12px 28px rgba(4, 12, 14, 0.42), 0 1px 0 rgba(255, 237, 190, 0.10) inset;
+  backdrop-filter: blur(12px);
+}
+
+.bottom-room-link {
+  min-height: 54px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.22rem;
+  border-radius: 0.75rem;
+  color: #C6BBA2;
+  font-size: 0.66rem;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  border: 1px solid transparent;
+}
+
+.bottom-room-link.active {
+  color: #F7E8C9;
+  background: rgba(201, 120, 64, 0.16);
+  border-color: rgba(207, 129, 69, 0.42);
+}
+
+.bottom-room-link svg {
+  flex-shrink: 0;
+}
+
+input,
+select,
+textarea,
+button {
+  font-size: 16px;
+}
+
+input,
+select,
+textarea {
+  min-height: 44px;
 }
 
 @media (max-width: 767px) {
   .warm-depth::before {
     background:
-      radial-gradient(90% 34% at 22% 0%, rgba(217, 155, 84, 0.13) 0%, transparent 70%),
-      linear-gradient(160deg, rgba(61, 72, 52, 0.8), rgba(42, 42, 34, 0.98) 56%, rgba(56, 39, 30, 0.95));
+      radial-gradient(90% 34% at 22% 0%, rgba(207, 129, 69, 0.15) 0%, transparent 70%),
+      radial-gradient(70% 40% at 100% 12%, rgba(27, 102, 108, 0.22) 0%, transparent 72%),
+      linear-gradient(160deg, rgba(16, 66, 70, 0.86), rgba(14, 34, 37, 0.98) 56%, rgba(36, 35, 31, 0.96));
   }
 
   .warm-card {
     background:
-      linear-gradient(180deg, rgba(88, 72, 50, 0.97) 0%, rgba(61, 55, 42, 0.98) 100%),
+      linear-gradient(180deg, rgba(74, 68, 51, 0.97) 0%, rgba(43, 61, 59, 0.98) 100%),
       repeating-linear-gradient(0deg, rgba(244, 221, 174, 0.04) 0 1px, transparent 1px 18px);
     box-shadow:
       0 1px 0 rgba(255, 242, 202, 0.10) inset,
       0 0 0 2px rgba(38, 30, 24, 0.18),
       0 6px 14px rgba(18, 14, 11, 0.20);
+  }
+
+  .warm-card::before {
+    width: 56px;
+    height: 14px;
+    top: -7px;
+  }
+
+  main {
+    min-width: 0;
   }
 }
 

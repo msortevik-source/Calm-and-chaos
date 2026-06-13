@@ -7,10 +7,10 @@ import { CalendarDays, CalendarRange, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 const LOADING_LINES = [
-  "Brewing coffee and checking the receipts.",
-  "Looking for patterns.",
-  "Checking whether snacks became emotional support again.",
-  "Sorting signal from noise.",
+  "Reviewing the records.",
+  "Checking the map against reality.",
+  "Looking for the quiet pattern.",
+  "Sorting signal from weather.",
 ];
 
 export default function ConversationPage() {
@@ -107,11 +107,11 @@ Goal: pattern awareness and momentum, not perfection.`
   };
 
   return (
-    <div className="px-6 md:px-12 py-10 md:py-16 max-w-4xl mx-auto" data-testid="conversation-page">
+    <div className="px-5 md:px-12 py-7 md:py-16 max-w-4xl mx-auto" data-testid="conversation-page">
       <div className="flex items-end justify-between mb-8">
         <div>
-          <div className="text-xs uppercase tracking-[0.25em] text-moss-200/70 mb-2">Receipts and patterns</div>
-          <h1 className="font-heading text-4xl md:text-5xl text-moss-50">Analysis Corner</h1>
+          <div className="text-xs uppercase tracking-[0.25em] text-moss-200/70 mb-2">House spirit</div>
+          <h1 className="font-heading text-4xl md:text-5xl text-moss-50">Record Review</h1>
         </div>
         <button data-testid="clear-conversation" onClick={clear} className="pill-btn rounded-full px-3 py-1.5 text-xs inline-flex items-center gap-1.5">
           <Trash2 size={13} /> Clear
@@ -119,13 +119,13 @@ Goal: pattern awareness and momentum, not perfection.`
       </div>
 
       <div className="warm-card rounded-3xl p-5 mb-8" data-testid="summary-actions">
-        <div className="text-xs uppercase tracking-[0.25em] text-moss-200/70 mb-3">Summaries</div>
+        <div className="text-xs uppercase tracking-[0.25em] text-moss-200/70 mb-3">Stored observations</div>
         <div className="flex flex-wrap gap-3">
           <button data-testid="weekly-summary-button" disabled={busy} onClick={() => requestSummary("weekly")} className="pill-btn primary rounded-full px-5 py-2 text-xs inline-flex items-center gap-2 disabled:opacity-40">
-            <CalendarDays size={14} /> Weekly Summary
+            <CalendarDays size={14} /> Weekly record
           </button>
           <button data-testid="monthly-summary-button" disabled={busy} onClick={() => requestSummary("monthly")} className="pill-btn rounded-full px-5 py-2 text-xs inline-flex items-center gap-2 disabled:opacity-40">
-            <CalendarRange size={14} /> Monthly Summary
+            <CalendarRange size={14} /> Monthly record
           </button>
         </div>
         {summaryPlaceholder && (
@@ -142,12 +142,12 @@ Goal: pattern awareness and momentum, not perfection.`
 
       <div className="space-y-6 mb-10" data-testid="messages">
         {messages.length === 0 && (
-          <p className="text-moss-200 italic font-body">No analysis yet. Ask what changed, what slipped, or where the money went.</p>
+          <p className="text-moss-200 italic font-body">No observations yet. Ask what changed, what slipped, or where the money went.</p>
         )}
         {messages.map((m) => (
           <div key={m.id} className={`rounded-2xl p-5 ${m.role === "user" ? "warm-card" : "warm-card border-amber/30"}`} style={m.role === "assistant" ? { background: "linear-gradient(180deg, rgba(212,163,115,0.10) 0%, rgba(43,47,42,0.85) 100%)" } : undefined}>
             <div className={`text-[10px] uppercase tracking-[0.25em] mb-2 ${m.role === "user" ? "text-moss-200/70" : "text-amber/90"}`}>
-              {m.role === "user" ? "you" : "analysis"}
+              {m.role === "user" ? "field note" : "house spirit"}
             </div>
             <p className={`font-body whitespace-pre-wrap leading-relaxed ${m.role === "assistant" ? "text-moss-50 text-base" : "text-moss-100"}`}>
               {renderInline(m.text)}
@@ -156,14 +156,14 @@ Goal: pattern awareness and momentum, not perfection.`
         ))}
         {busy && (
           <div className="warm-card rounded-2xl p-4 border border-amber/20" data-testid="analysis-loading">
-            <div className="text-[10px] uppercase tracking-[0.25em] mb-2 text-amber/90">analysis</div>
+            <div className="text-[10px] uppercase tracking-[0.25em] mb-2 text-amber/90">house spirit</div>
             <p className="text-moss-100 italic">{LOADING_LINES[loadingIndex]}</p>
           </div>
         )}
         <div ref={endRef} />
       </div>
 
-      <ChatInput onSubmit={submit} busy={busy} initialValue={seed} placeholder="Ask for patterns, comparisons, or what to adjust next." />
+      <ChatInput onSubmit={submit} busy={busy} initialValue={seed} placeholder="Ask what the records suggest." />
     </div>
   );
 }

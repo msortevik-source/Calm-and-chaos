@@ -157,12 +157,12 @@ export default function LifeUpgradesPage() {
   };
 
   return (
-    <div className="px-6 md:px-12 py-10 md:py-16 max-w-5xl mx-auto" data-testid="life-upgrades-page">
+    <div className="px-5 md:px-12 py-7 md:py-16 max-w-5xl mx-auto" data-testid="life-upgrades-page">
       <div className="mb-8">
-        <div className="text-xs uppercase tracking-[0.25em] text-moss-200/70 mb-2">Future me board</div>
-        <h1 className="font-heading text-4xl md:text-5xl text-moss-50">Life Upgrades</h1>
+        <div className="text-xs uppercase tracking-[0.25em] text-moss-200/70 mb-2">Notice board</div>
+        <h1 className="font-heading text-4xl md:text-5xl text-moss-50">Future Projects</h1>
         <p className="text-moss-200 mt-3 font-body italic max-w-xl">
-          Mental tabs parked here. No alarms. No guilt. Just fewer things rattling around loose.
+          Pinned ideas, possible projects, wishlist items. No alarms. No guilt.
         </p>
       </div>
 
@@ -170,7 +170,7 @@ export default function LifeUpgradesPage() {
         <form onSubmit={addItem} className="warm-card rounded-3xl p-5 space-y-4" data-testid="life-upgrade-form">
           <div className="flex items-center gap-2">
             <Plus size={16} className="text-amber" />
-            <h2 className="font-heading text-2xl text-moss-50">Add item</h2>
+            <h2 className="font-heading text-2xl text-moss-50">Pin something</h2>
           </div>
 
           <label className="block">
@@ -231,7 +231,7 @@ export default function LifeUpgradesPage() {
           </label>
 
           <button disabled={busy} className="pill-btn primary rounded-full px-5 py-2 text-xs w-full sm:w-auto" data-testid="life-add">
-            Add new item
+            Pin to board
           </button>
         </form>
 
@@ -241,7 +241,7 @@ export default function LifeUpgradesPage() {
               <div className="flex items-center gap-2">
                 <ClipboardList size={16} className="text-amber" />
                 <div>
-                  <div className="font-heading text-2xl text-moss-50">Board</div>
+                  <div className="font-heading text-2xl text-moss-50">Notice Board</div>
                   <div className="text-xs text-moss-200/70">{activeCount} active | {doneCount} done</div>
                 </div>
               </div>

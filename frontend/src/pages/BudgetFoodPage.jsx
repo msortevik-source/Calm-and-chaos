@@ -190,9 +190,9 @@ function BudgetV1() {
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 text-moss-200 text-xs uppercase tracking-[0.25em] mb-2">
-            <Wallet size={14} /> Money awareness
+            <Wallet size={14} /> Household ledger
           </div>
-          <h2 className="font-heading text-3xl text-moss-50">Where does it go?</h2>
+          <h2 className="font-heading text-3xl text-moss-50">Ledger Period</h2>
         </div>
         <div className="flex flex-col items-start md:items-end gap-2">
           <input data-testid="budget-month" type="month" value={cycle} onChange={(e) => setCycle(e.target.value)} className={inputCls + " w-44"} />
@@ -202,7 +202,7 @@ function BudgetV1() {
       </div>
 
       <div className="warm-card rounded-2xl p-4" data-testid="monthly-snapshot">
-        <div className="text-xs uppercase tracking-[0.22em] text-moss-200/70 mb-2">budget cycle overview</div>
+        <div className="text-xs uppercase tracking-[0.22em] text-moss-200/70 mb-2">ledger overview</div>
         <div className="font-heading text-xl text-moss-50 mb-2">{cycleInfo.label || summary.cycle_label || "Current salary cycle"}</div>
         <div className="text-sm md:text-base text-moss-50 leading-relaxed">
           Income: <span className="text-amber">{money(summary.income_total)}</span>
@@ -223,24 +223,24 @@ function BudgetV1() {
       </div>
       <div className="warm-card rounded-2xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-2">
         <div>
-          <div className="text-[10px] uppercase tracking-[0.22em] text-moss-200/70">cycle reset</div>
+          <div className="text-[10px] uppercase tracking-[0.22em] text-moss-200/70">ledger reset</div>
           <div className="text-sm text-moss-100">{resetWindow}: new cycle, same labels, fresh amounts and logs.</div>
         </div>
         <div className="font-heading text-xl text-moss-50">{summary.checked_days || 0}/{summary.days_in_cycle || summary.days_in_month || 31} days checked in</div>
       </div>
       <div className="warm-card rounded-2xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-3">
         <div>
-          <div className="text-[10px] uppercase tracking-[0.22em] text-moss-200/70">cycle archive</div>
-          <div className="text-sm text-moss-100">Save this cycle as a permanent budget record for later comparison.</div>
+          <div className="text-[10px] uppercase tracking-[0.22em] text-moss-200/70">ledger shelf</div>
+          <div className="text-sm text-moss-100">Store this period as an old ledger book for later comparison.</div>
         </div>
         <button data-testid="budget-archive-current" disabled={busy} onClick={archiveCurrentCycle} className="pill-btn primary rounded-full px-5 py-2 text-xs inline-flex items-center gap-2">
-          <Archive size={13} /> Save / Archive Current Cycle
+          <Archive size={13} /> Store ledger period
         </button>
       </div>
 
       <div className="grid xl:grid-cols-[minmax(0,1.65fr)_minmax(320px,0.85fr)] gap-5 items-start">
         <div className="warm-card rounded-3xl p-5">
-          <h3 className="font-heading text-xl text-moss-50 mb-4">Cycle inputs</h3>
+          <h3 className="font-heading text-xl text-moss-50 mb-4">Ledger entries</h3>
           <div className="grid xl:grid-cols-2 gap-5">
             <div>
               <div className="text-xs uppercase tracking-[0.22em] text-moss-200/70 mb-3">income</div>
@@ -284,7 +284,7 @@ function BudgetV1() {
         <div className="warm-card rounded-3xl p-4 xl:max-w-[380px] xl:justify-self-end w-full">
           <div className="flex items-center gap-2 mb-4">
             <ListChecks size={15} className="text-amber" />
-            <h3 className="font-heading text-xl text-moss-50">Any spending today?</h3>
+            <h3 className="font-heading text-xl text-moss-50">Anything spent today?</h3>
           </div>
           <div className="grid grid-cols-1 gap-2">
             <input data-testid="spending-amount" type="number" step="0.01" placeholder="amount in kr" value={spend.amount || ""} onChange={(e) => setSpend((p) => ({ ...p, amount: e.target.value }))} className={inputCls} />
@@ -328,7 +328,7 @@ function BudgetV1() {
           <div className="warm-card rounded-3xl p-5 mb-4" data-testid="spending-category-overview">
             <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-2 mb-4">
               <div>
-                <div className="text-xs uppercase tracking-[0.22em] text-moss-200/70">cycle category overview</div>
+                <div className="text-xs uppercase tracking-[0.22em] text-moss-200/70">ledger tabs</div>
                 <div className="text-sm text-moss-200 mt-1">Tap a category when you want the receipt pile. Otherwise it can sit quietly.</div>
               </div>
               <div className="font-heading text-xl text-amber">{money(summary.flexible_total)}</div>
@@ -391,7 +391,7 @@ function BudgetV1() {
       <div className="warm-card rounded-3xl p-5" data-testid="budget-cycle-archive">
         <div className="flex items-center gap-2 mb-4">
           <Archive size={16} className="text-amber" />
-          <h3 className="font-heading text-2xl text-moss-50">Budget Log</h3>
+          <h3 className="font-heading text-2xl text-moss-50">Old Ledger Books</h3>
         </div>
         <div className="space-y-3">
           {archives.length === 0 && (
@@ -658,12 +658,12 @@ function FoodV1() {
 
 export default function BudgetFoodPage() {
   return (
-    <div className="px-6 md:px-12 py-10 md:py-16 max-w-6xl mx-auto" data-testid="budget-page">
+    <div className="px-5 md:px-12 py-7 md:py-16 max-w-6xl mx-auto" data-testid="budget-page">
       <div className="mb-10">
-        <div className="text-xs uppercase tracking-[0.25em] text-moss-200/70 mb-2">Receipts without shame</div>
-        <h1 className="font-heading text-4xl md:text-5xl text-moss-50">Budget</h1>
+        <div className="text-xs uppercase tracking-[0.25em] text-moss-200/70 mb-2">Household ledger</div>
+        <h1 className="font-heading text-4xl md:text-5xl text-moss-50">Budget Room</h1>
         <p className="text-moss-200 mt-3 font-body italic max-w-xl">
-          Awareness, not accounting. Useful numbers, fewer mystery leaks.
+          Money records without moral theatre. Useful numbers, fewer mystery leaks.
         </p>
       </div>
       <BudgetV1 />

@@ -3,21 +3,21 @@ import { Home, BarChart3, Activity, Sparkles, Wallet, Mail, ClipboardList } from
 import Goblin from "./Goblin";
 
 const links = [
-  { to: "/", label: "Home", icon: Home, testid: "nav-home" },
-  { to: "/conversation", label: "Analysis Corner", icon: BarChart3, testid: "nav-conversation" },
-  { to: "/training", label: "Training", icon: Activity, testid: "nav-training" },
-  { to: "/budget", label: "Budget", icon: Wallet, testid: "nav-budget" },
-  { to: "/life-upgrades", label: "Life Upgrades", icon: ClipboardList, testid: "nav-life-upgrades" },
-  { to: "/letter", label: "Letter", icon: Mail, testid: "nav-letter" },
-  { to: "/patterns", label: "Patterns", icon: Sparkles, testid: "nav-patterns" },
+  { to: "/", label: "Hearth", icon: Home, testid: "nav-home", mobile: true },
+  { to: "/conversation", label: "Spirit", icon: BarChart3, testid: "nav-conversation", mobile: true },
+  { to: "/training", label: "Trails", icon: Activity, testid: "nav-training", mobile: true },
+  { to: "/budget", label: "Ledger", icon: Wallet, testid: "nav-budget", mobile: true },
+  { to: "/life-upgrades", label: "Board", icon: ClipboardList, testid: "nav-life-upgrades", mobile: true },
+  { to: "/letter", label: "Letters", icon: Mail, testid: "nav-letter" },
+  { to: "/patterns", label: "Weather", icon: Sparkles, testid: "nav-patterns" },
 ];
 
 function seasonLabel() {
   const month = new Date().getMonth();
-  if (month <= 1 || month === 11) return "winter ledger";
-  if (month >= 2 && month <= 4) return "spring ledger";
-  if (month >= 5 && month <= 7) return "summer ledger";
-  return "autumn ledger";
+  if (month <= 1 || month === 11) return "winter station";
+  if (month >= 2 && month <= 4) return "spring station";
+  if (month >= 5 && month <= 7) return "summer station";
+  return "autumn station";
 }
 
 export default function Shell() {
@@ -54,7 +54,7 @@ export default function Shell() {
                 <Goblin size={54} />
                 <div>
                   <p className="font-heading text-base text-moss-50 leading-tight">House spirit note</p>
-                  <p className="text-moss-100/90 italic mt-1">Receipts, maps, small truths. No performance theatre.</p>
+                  <p className="text-moss-100/90 italic mt-1">Records reviewed. Nothing is on fire unless proven otherwise.</p>
                 </div>
               </div>
             </div>
@@ -68,19 +68,26 @@ export default function Shell() {
               <div className="text-[9px] uppercase tracking-[0.18em] text-moss-200/80">{season}</div>
             </div>
           </div>
-          <nav className="flex overflow-x-auto px-3 pb-3 gap-4 text-xs">
-            {links.map(l => (
-              <NavLink key={l.to} to={l.to} end={l.to === "/"} data-testid={`m-${l.testid}`}
-                className={({ isActive }) => `whitespace-nowrap px-3 py-1.5 rounded-sm border ${isActive ? "text-amber bg-amber/10 border-amber/40" : "text-moss-200 border-transparent"}`}>
-                {l.label}
-              </NavLink>
-            ))}
-          </nav>
         </header>
 
-        <main className="flex-1 pt-32 md:pt-0">
+        <main className="flex-1 pt-24 pb-28 md:pt-0 md:pb-0">
           <Outlet />
         </main>
+
+        <nav className="bottom-room-nav md:hidden" aria-label="Primary rooms">
+          {links.filter((l) => l.mobile).map((l) => (
+            <NavLink
+              key={l.to}
+              to={l.to}
+              end={l.to === "/"}
+              data-testid={`m-${l.testid}`}
+              className={({ isActive }) => `bottom-room-link ${isActive ? "active" : ""}`}
+            >
+              <l.icon size={19} />
+              <span>{l.label}</span>
+            </NavLink>
+          ))}
+        </nav>
       </div>
     </div>
   );
