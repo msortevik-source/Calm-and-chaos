@@ -100,10 +100,6 @@ body {
 /* Selection */
 ::selection { background: rgba(212, 163, 115, 0.32); color: #F1E8D8; }
 
-.content-layer {
-  overflow-x: hidden;
-}
-
 /* Field-journal navigation */
 .nav-link {
   position: relative;
@@ -297,6 +293,7 @@ select,
 textarea,
 button {
   font-size: 16px;
+  touch-action: manipulation;
 }
 
 input,
@@ -372,4 +369,36 @@ textarea {
   z-index: -1;
 }
 
-.content-layer { position: relative; z-index: 2; }
+.content-layer {
+  position: relative;
+  z-index: 2;
+  overflow-x: hidden;
+}
+
+.room-hearth .warm-card {
+  border-color: rgba(215, 151, 82, 0.56);
+}
+
+.room-spirit .warm-card {
+  background:
+    linear-gradient(180deg, rgba(33, 68, 72, 0.96) 0%, rgba(35, 52, 52, 0.98) 100%),
+    repeating-linear-gradient(0deg, rgba(226, 244, 241, 0.035) 0 1px, transparent 1px 18px);
+}
+
+.room-trails .warm-card {
+  background:
+    linear-gradient(180deg, rgba(37, 68, 61, 0.97) 0%, rgba(35, 52, 48, 0.98) 100%),
+    repeating-linear-gradient(135deg, rgba(231, 218, 176, 0.04) 0 1px, transparent 1px 20px);
+}
+
+.room-ledger .warm-card {
+  background:
+    linear-gradient(180deg, rgba(75, 68, 50, 0.98) 0%, rgba(50, 55, 49, 0.98) 100%),
+    repeating-linear-gradient(0deg, rgba(244, 221, 174, 0.055) 0 1px, transparent 1px 16px);
+}
+
+.room-board .warm-card {
+  background:
+    linear-gradient(180deg, rgba(72, 57, 47, 0.97) 0%, rgba(43, 58, 56, 0.98) 100%),
+    radial-gradient(circle at 12% 10%, rgba(212, 163, 115, 0.12), transparent 24%);
+}

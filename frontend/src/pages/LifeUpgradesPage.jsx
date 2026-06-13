@@ -157,7 +157,7 @@ export default function LifeUpgradesPage() {
   };
 
   return (
-    <div className="px-5 md:px-12 py-7 md:py-16 max-w-5xl mx-auto" data-testid="life-upgrades-page">
+    <div className="room-board px-5 md:px-12 py-7 md:py-16 max-w-5xl mx-auto" data-testid="life-upgrades-page">
       <div className="mb-8">
         <div className="text-xs uppercase tracking-[0.25em] text-moss-200/70 mb-2">Notice board</div>
         <h1 className="font-heading text-4xl md:text-5xl text-moss-50">Future Projects</h1>

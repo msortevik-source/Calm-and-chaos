@@ -29,8 +29,8 @@ export default function HomePage() {
   };
 
   return (
-    <div className="px-5 md:px-12 lg:px-20 py-7 md:py-16 max-w-7xl mx-auto" data-testid="home-page">
-      <div className="flex items-end gap-6 md:gap-10 flex-wrap md:flex-nowrap">
+    <div className="room-hearth px-5 md:px-12 lg:px-20 py-7 md:py-16 max-w-7xl mx-auto" data-testid="home-page">
+      <div className="flex items-end gap-5 md:gap-10 flex-wrap md:flex-nowrap">
         <div className="relative shrink-0 hidden sm:block" data-testid="goblin-area">
           <div className="goblin-glow" />
           <Goblin size={220} />
@@ -40,7 +40,7 @@ export default function HomePage() {
         </div>
       </div>
 
-      <div className="mt-12 md:mt-16 grid grid-cols-1 lg:grid-cols-12 gap-6 md:gap-8">
+      <div className="mt-7 md:mt-14 grid grid-cols-1 lg:grid-cols-12 gap-5 md:gap-8">
         {/* Chat input — primary, asymmetric large slot */}
         <div className="lg:col-span-7 lg:col-start-1">
           <div className="mb-3 text-xs uppercase tracking-[0.25em] text-moss-200/70">Hearth note</div>

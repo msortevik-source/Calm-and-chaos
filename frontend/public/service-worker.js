@@ -1,4 +1,4 @@
-const CACHE_NAME = "calm-chaos-shell-v1";
+const CACHE_NAME = "calm-chaos-shell-v2";
 const APP_SHELL = [
   "/",
   "/manifest.json",
@@ -45,13 +45,13 @@ self.addEventListener("fetch", (event) => {
 
   if (url.origin === self.location.origin) {
     event.respondWith(
-      caches.match(request).then((cached) => (
-        cached || fetch(request).then((response) => {
+      fetch(request)
+        .then((response) => {
           const copy = response.clone();
           caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
           return response;
         })
-      )),
+        .catch(() => caches.match(request)),
     );
   }
 });

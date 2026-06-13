@@ -384,7 +384,7 @@ export default function TrainingPage() {
   };
 
   return (
-    <div className="px-5 md:px-12 py-7 md:py-16 max-w-6xl mx-auto" data-testid="training-page">
+    <div className="room-trails px-5 md:px-12 py-7 md:py-16 max-w-6xl mx-auto" data-testid="training-page">
       <div className="mb-10">
         <div className="text-xs uppercase tracking-[0.25em] text-moss-200/70 mb-2">Trail records</div>
         <h1 className="font-heading text-4xl md:text-5xl text-moss-50">Training Station</h1>

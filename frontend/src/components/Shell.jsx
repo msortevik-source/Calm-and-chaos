@@ -67,6 +67,9 @@ export default function Shell() {
               <div className="font-heading text-lg text-moss-50">Calm <span className="text-amber">&</span> Chaos</div>
               <div className="text-[9px] uppercase tracking-[0.18em] text-moss-200/80">{season}</div>
             </div>
+            <div className="house-spirit-note rounded-full h-11 w-11 flex items-center justify-center overflow-hidden" aria-hidden="true">
+              <Goblin size={38} />
+            </div>
           </div>
         </header>
 

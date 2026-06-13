@@ -107,7 +107,7 @@ Goal: pattern awareness and momentum, not perfection.`
   };
 
   return (
-    <div className="px-5 md:px-12 py-7 md:py-16 max-w-4xl mx-auto" data-testid="conversation-page">
+    <div className="room-spirit px-5 md:px-12 py-7 md:py-16 max-w-4xl mx-auto" data-testid="conversation-page">
       <div className="flex items-end justify-between mb-8">
         <div>
           <div className="text-xs uppercase tracking-[0.25em] text-moss-200/70 mb-2">House spirit</div>
