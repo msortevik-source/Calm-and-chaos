@@ -42,12 +42,12 @@ export default function ChatInput({ onSubmit, busy, compact = false, placeholder
             className="pill-btn primary rounded-full px-4 py-1.5 text-xs tracking-wide flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
           >
             {busy ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
-            Ask
+            Send note
           </button>
         </div>
       </div>
       <div className="text-[11px] text-moss-200/60 mt-2 pl-2 tracking-wide">
-        Cmd/Ctrl + Enter to send
+        Cmd/Ctrl + Enter seals the note
       </div>
     </div>
   );

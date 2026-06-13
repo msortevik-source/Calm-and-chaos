@@ -18,8 +18,7 @@ html, body, #root {
 
 body {
   margin: 0;
-  /* Rainy cabin moss: still dark, with the lamp actually on. */
-  background-color: #26302A;
+  background-color: #2B2A22;
   color: #F1E8D8;
   font-family: 'Manrope', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
@@ -30,24 +29,24 @@ body {
 
 @layer base {
   :root {
-    --background: 125 12% 17%;
+    --background: 44 11% 15%;
     --foreground: 37 38% 90%;
-    --card: 112 11% 22%;
+    --card: 41 18% 25%;
     --card-foreground: 37 38% 90%;
     --popover: 112 11% 22%;
     --popover-foreground: 37 38% 90%;
-    --primary: 130 15% 29%;
+    --primary: 91 16% 28%;
     --primary-foreground: 37 38% 90%;
     --secondary: 112 10% 24%;
     --secondary-foreground: 37 38% 90%;
     --muted: 112 10% 24%;
     --muted-foreground: 42 16% 68%;
-    --accent: 28 51% 64%;
+    --accent: 30 56% 61%;
     --accent-foreground: 105 14% 12%;
     --destructive: 8 60% 45%;
     --destructive-foreground: 37 38% 90%;
-    --border: 112 12% 31%;
-    --input: 112 11% 27%;
+    --border: 35 21% 38%;
+    --input: 42 15% 23%;
     --ring: 28 51% 64%;
     --radius: 1rem;
   }
@@ -58,7 +57,7 @@ body {
   h1, h2, h3, h4 { font-family: 'Spectral', serif; font-weight: 400; letter-spacing: -0.01em; }
 }
 
-/* Warm depth: a quiet glow behind the app without dimming the UI */
+/* Forest-house backdrop: darker room, visible lamp, old paper/map texture. */
 .warm-depth::before {
   content: "";
   position: fixed;
@@ -66,18 +65,22 @@ body {
   pointer-events: none;
   z-index: 0;
   background:
-    radial-gradient(60% 34% at 18% 0%, rgba(212, 163, 115, 0.045) 0%, transparent 64%);
+    radial-gradient(52% 36% at 16% 0%, rgba(217, 155, 84, 0.16) 0%, transparent 62%),
+    radial-gradient(38% 34% at 92% 12%, rgba(137, 82, 49, 0.13) 0%, transparent 66%),
+    linear-gradient(135deg, rgba(61, 72, 52, 0.74) 0%, rgba(42, 42, 34, 0.96) 42%, rgba(49, 37, 31, 0.92) 100%),
+    repeating-linear-gradient(90deg, rgba(255,255,255,0.018) 0 1px, transparent 1px 38px),
+    repeating-linear-gradient(0deg, rgba(0,0,0,0.035) 0 1px, transparent 1px 34px);
 }
 
-/* Subtle grain overlay */
+/* Subtle journal paper grain */
 .grain-overlay::after {
   content: "";
   position: fixed;
   inset: 0;
   pointer-events: none;
   z-index: 1;
-  opacity: 0.006;
-  mix-blend-mode: soft-light;
+  opacity: 0.035;
+  mix-blend-mode: overlay;
   background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.95 0 0 0 0 0.88 0 0 0 0 0.76 0 0 0 0.45 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
 }
 
@@ -97,54 +100,152 @@ body {
 /* Selection */
 ::selection { background: rgba(212, 163, 115, 0.32); color: #F1E8D8; }
 
-/* Soft nav underline */
+/* Field-journal navigation */
 .nav-link {
   position: relative;
   transition: color 0.25s ease;
+  padding: 0.34rem 0.45rem;
+  border-radius: 0.35rem;
 }
 .nav-link::after {
   content: "";
   position: absolute;
   left: 0; right: 100%;
-  bottom: -4px;
-  height: 1px;
-  background: #D4A373;
+  bottom: 0;
+  height: 2px;
+  background: linear-gradient(90deg, #D4A373, #9C6A42);
   transition: right 0.3s ease;
 }
 .nav-link:hover::after, .nav-link.active::after { right: 0; }
-.nav-link.active { color: #F1E8D8; }
+.nav-link:hover,
+.nav-link.active {
+  color: #F7E8C9;
+  background: rgba(212, 163, 115, 0.075);
+}
 
-/* Pills */
+/* Stamped controls */
 .pill-btn {
-  border: 1px solid rgba(212,163,115,0.30);
-  color: #F1E8D8;
-  background: transparent;
+  border: 1px solid rgba(166, 103, 61, 0.58);
+  color: #F7E8C9;
+  background:
+    linear-gradient(180deg, rgba(79, 55, 39, 0.78), rgba(53, 43, 33, 0.78));
+  box-shadow: 0 1px 0 rgba(255, 239, 202, 0.12) inset, 0 2px 0 rgba(29, 22, 18, 0.38);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
   transition: background-color 0.25s ease, border-color 0.25s ease, transform 0.2s ease, color 0.25s ease;
 }
-.pill-btn:hover { background: rgba(212,163,115,0.12); border-color: rgba(212,163,115,0.55); }
+.pill-btn:hover { background: rgba(149, 84, 45, 0.48); border-color: rgba(226, 168, 95, 0.72); }
 .pill-btn:active { transform: translateY(1px); }
-.pill-btn.primary { background: #405344; border-color: #526653; }
-.pill-btn.primary:hover { background: #4D604F; }
+.pill-btn.primary {
+  background: linear-gradient(180deg, #8A5A38 0%, #68432D 100%);
+  border-color: #C89157;
+  color: #FFF2D0;
+}
+.pill-btn.primary:hover { background: linear-gradient(180deg, #9A6740 0%, #714A32 100%); }
 
-/* Warm card surface */
+/* Journal object surface. Existing pages call this "card"; visually it is now a pinned note/page. */
 .warm-card {
-  background: linear-gradient(180deg, rgba(58, 70, 59, 0.97) 0%, rgba(48, 59, 50, 0.97) 100%);
-  border: 1px solid #5A6A5B;
-  box-shadow: 0 1px 0 rgba(241,232,216,0.055) inset, 0 8px 18px rgba(8,12,9,0.10);
+  position: relative;
+  isolation: isolate;
+  background:
+    linear-gradient(180deg, rgba(88, 72, 50, 0.94) 0%, rgba(61, 55, 42, 0.96) 100%),
+    repeating-linear-gradient(0deg, rgba(244, 221, 174, 0.04) 0 1px, transparent 1px 18px);
+  border: 1px solid rgba(188, 139, 83, 0.55);
+  border-radius: 0.75rem !important;
+  box-shadow:
+    0 1px 0 rgba(255, 242, 202, 0.12) inset,
+    0 0 0 3px rgba(38, 30, 24, 0.16),
+    0 10px 20px rgba(18, 14, 11, 0.22);
+}
+
+.warm-card::before {
+  content: "";
+  position: absolute;
+  top: -9px;
+  left: 1.2rem;
+  width: 72px;
+  height: 18px;
+  z-index: 1;
+  pointer-events: none;
+  border-radius: 2px;
+  background:
+    linear-gradient(90deg, rgba(221, 187, 132, 0.46), rgba(239, 209, 154, 0.32));
+  box-shadow: 0 1px 3px rgba(26, 18, 12, 0.25);
+  transform: rotate(-1.2deg);
+}
+
+.warm-card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: -1;
+  border-radius: inherit;
+  opacity: 0.18;
+  background-image:
+    radial-gradient(circle at 16% 18%, rgba(255,255,255,0.08), transparent 1.2px),
+    radial-gradient(circle at 70% 74%, rgba(0,0,0,0.16), transparent 1.4px),
+    repeating-linear-gradient(0deg, transparent 0 22px, rgba(255,235,188,0.06) 23px 24px);
+}
+
+details.warm-card summary,
+details summary {
+  marker: none;
+}
+
+details summary::-webkit-details-marker {
+  display: none;
+}
+
+details summary::after {
+  content: "open";
+  display: inline-block;
+  margin-left: 0.75rem;
+  color: #D4A373;
+  font-size: 0.64rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+details[open] summary::after {
+  content: "close";
+}
+
+.field-label,
+.warm-card [class*="uppercase"] {
+  font-family: 'Manrope', system-ui, sans-serif;
+  letter-spacing: 0.18em;
+}
+
+.house-spirit-note {
+  border: 1px solid rgba(212,163,115,0.38);
+  background: rgba(45, 35, 27, 0.72);
+  color: #EBD5AE;
+  box-shadow: 0 1px 0 rgba(255,255,255,0.06) inset;
+}
+
+.wood-rail {
+  background:
+    linear-gradient(90deg, rgba(47, 35, 26, 0.98), rgba(70, 49, 34, 0.96)),
+    repeating-linear-gradient(90deg, rgba(255,255,255,0.035) 0 2px, transparent 2px 18px);
+  border-color: rgba(157, 105, 65, 0.55);
 }
 
 @media (max-width: 767px) {
   .warm-depth::before {
     background:
-      radial-gradient(95% 40% at 20% 0%, rgba(212, 163, 115, 0.035) 0%, transparent 65%);
-  }
-
-  .grain-overlay::after {
-    display: none;
+      radial-gradient(90% 34% at 22% 0%, rgba(217, 155, 84, 0.13) 0%, transparent 70%),
+      linear-gradient(160deg, rgba(61, 72, 52, 0.8), rgba(42, 42, 34, 0.98) 56%, rgba(56, 39, 30, 0.95));
   }
 
   .warm-card {
-    background: linear-gradient(180deg, rgba(61, 74, 62, 0.98) 0%, rgba(51, 63, 53, 0.98) 100%);
+    background:
+      linear-gradient(180deg, rgba(88, 72, 50, 0.97) 0%, rgba(61, 55, 42, 0.98) 100%),
+      repeating-linear-gradient(0deg, rgba(244, 221, 174, 0.04) 0 1px, transparent 1px 18px);
+    box-shadow:
+      0 1px 0 rgba(255, 242, 202, 0.10) inset,
+      0 0 0 2px rgba(38, 30, 24, 0.18),
+      0 6px 14px rgba(18, 14, 11, 0.20);
   }
 }
 

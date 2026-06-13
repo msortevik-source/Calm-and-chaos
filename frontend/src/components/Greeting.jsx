@@ -14,7 +14,7 @@ export default function Greeting() {
   return (
     <div className="animate-fade-up" data-testid="greeting-area">
       <div className="text-xs uppercase tracking-[0.25em] text-moss-200/70 mb-3">
-        {dayName()} · {dateLine()}
+        Field journal / {dayName()} / {dateLine()}
       </div>
       <h1 className="font-heading text-4xl sm:text-5xl lg:text-6xl text-moss-50 leading-[1.05]">
         {g.greeting || "\u00A0"}
