@@ -201,6 +201,11 @@ body {
     repeating-linear-gradient(0deg, transparent 0 22px, rgba(255,235,188,0.06) 23px 24px);
 }
 
+.warm-card > * {
+  position: relative;
+  z-index: 2;
+}
+
 details.warm-card summary,
 details summary {
   marker: none;
@@ -379,10 +384,20 @@ textarea {
   border-color: rgba(215, 151, 82, 0.56);
 }
 
+.room-hearth .warm-card::before {
+  background: linear-gradient(90deg, rgba(229, 177, 103, 0.52), rgba(243, 215, 159, 0.34));
+}
+
 .room-spirit .warm-card {
   background:
     linear-gradient(180deg, rgba(33, 68, 72, 0.96) 0%, rgba(35, 52, 52, 0.98) 100%),
     repeating-linear-gradient(0deg, rgba(226, 244, 241, 0.035) 0 1px, transparent 1px 18px);
+}
+
+.room-spirit .warm-card::after {
+  background-image:
+    radial-gradient(circle at 85% 18%, rgba(212,163,115,0.13), transparent 2px),
+    repeating-linear-gradient(90deg, transparent 0 28px, rgba(220,245,240,0.045) 29px 30px);
 }
 
 .room-trails .warm-card {
@@ -391,14 +406,38 @@ textarea {
     repeating-linear-gradient(135deg, rgba(231, 218, 176, 0.04) 0 1px, transparent 1px 20px);
 }
 
+.room-trails .warm-card::after {
+  background-image:
+    linear-gradient(135deg, transparent 0 82%, rgba(212,163,115,0.18) 82% 84%, transparent 84%),
+    repeating-linear-gradient(135deg, transparent 0 24px, rgba(231,218,176,0.055) 25px 26px);
+}
+
 .room-ledger .warm-card {
   background:
     linear-gradient(180deg, rgba(75, 68, 50, 0.98) 0%, rgba(50, 55, 49, 0.98) 100%),
     repeating-linear-gradient(0deg, rgba(244, 221, 174, 0.055) 0 1px, transparent 1px 16px);
 }
 
+.room-ledger .warm-card::after {
+  background-image:
+    repeating-linear-gradient(0deg, transparent 0 31px, rgba(255,235,188,0.10) 32px 33px),
+    repeating-linear-gradient(90deg, transparent 0 92px, rgba(255,235,188,0.055) 93px 94px);
+}
+
 .room-board .warm-card {
   background:
     linear-gradient(180deg, rgba(72, 57, 47, 0.97) 0%, rgba(43, 58, 56, 0.98) 100%),
     radial-gradient(circle at 12% 10%, rgba(212, 163, 115, 0.12), transparent 24%);
+}
+
+.room-board .warm-card::before {
+  left: 50%;
+  transform: translateX(-50%) rotate(0.6deg);
+}
+
+.room-board .warm-card::after {
+  background-image:
+    radial-gradient(circle at 10% 12%, rgba(244,221,174,0.12), transparent 2px),
+    radial-gradient(circle at 90% 14%, rgba(244,221,174,0.10), transparent 2px),
+    radial-gradient(circle at 18% 82%, rgba(0,0,0,0.16), transparent 1.5px);
 }

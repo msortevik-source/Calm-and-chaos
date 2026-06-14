@@ -5,6 +5,7 @@ import {
   archiveBudgetCycle,
   createSpending,
   deleteSpending,
+  getBudgetArchive,
   getBudgetV1,
   getFoodV1,
   listBudgetArchives,
@@ -47,6 +48,7 @@ function BudgetV1() {
   const [cycle, setCycle] = useState(cycleKeyForDate());
   const [data, setData] = useState(null);
   const [archives, setArchives] = useState([]);
+  const [archiveDetails, setArchiveDetails] = useState({});
   const [setup, setSetup] = useState({ income: {}, fixed_expenses: {} });
   const [spend, setSpend] = useState({ date: todayIso(), category: "groceries" });
   const [busy, setBusy] = useState(false);
@@ -162,6 +164,19 @@ function BudgetV1() {
       toast("Cycle did not archive.", { description: e?.response?.data?.detail || e?.message || "No useful error returned." });
     } finally {
       setBusy(false);
+    }
+  };
+
+  const loadArchiveDetail = async (archive) => {
+    const key = archive.cycle_key || archive.id;
+    if (!key || archiveDetails[key]?.spending) return;
+    setArchiveDetails((prev) => ({ ...prev, [key]: { ...(prev[key] || archive), loading: true } }));
+    try {
+      const res = await getBudgetArchive(key);
+      setArchiveDetails((prev) => ({ ...prev, [key]: { ...(res.archive || archive), loading: false } }));
+    } catch (e) {
+      setArchiveDetails((prev) => ({ ...prev, [key]: { ...(prev[key] || archive), loading: false, error: true } }));
+      toast("Old ledger book did not open.", { description: e?.response?.data?.detail || "" });
     }
   };
 
@@ -398,11 +413,13 @@ function BudgetV1() {
             <p className="text-sm text-moss-200 italic">No archived cycles yet. The drawer is empty, suspiciously innocent.</p>
           )}
           {archives.map((archive) => {
+            const key = archive.cycle_key || archive.id;
+            const fullArchive = archiveDetails[key] || archive;
             const archiveSummary = archive.summary || {};
             const archiveCategories = archive.categories || archiveSummary.by_category || {};
-            const archiveSpending = archive.spending || [];
+            const archiveSpending = fullArchive.spending || [];
             return (
-              <details key={archive.cycle_key || archive.id} className="rounded-2xl border border-moss-700/70 bg-moss-800/35 p-4">
+              <details key={key} onToggle={(event) => event.currentTarget.open && loadArchiveDetail(archive)} className="rounded-2xl border border-moss-700/70 bg-moss-800/35 p-4">
                 <summary className="cursor-pointer list-none">
                   <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
                     <div>
@@ -440,7 +457,8 @@ function BudgetV1() {
                           <span className="text-moss-50">{money(entry.amount, 2)}</span>
                         </div>
                       ))}
-                      {archiveSpending.length === 0 && <div className="text-sm text-moss-200 italic">No entries in this cycle.</div>}
+                      {archiveDetails[key]?.loading && <div className="text-sm text-moss-200 italic">Opening the old ledger book.</div>}
+                      {!archiveDetails[key]?.loading && archiveSpending.length === 0 && <div className="text-sm text-moss-200 italic">No entries in this cycle.</div>}
                     </div>
                   </div>
                 </div>

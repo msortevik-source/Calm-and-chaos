@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   getTemplate,
   getTrainingMonth,
+  getTrainingMonthArchive,
   listTrainingMonthArchives,
   archiveTrainingMonth,
   createTraining,
@@ -145,6 +146,7 @@ export default function TrainingPage() {
   const [template, setTemplate] = useState(LOCAL_TEMPLATE);
   const [entries, setEntries] = useState([]);
   const [archives, setArchives] = useState([]);
+  const [archiveDetails, setArchiveDetails] = useState({});
   const [trainingMonth, setTrainingMonth] = useState(monthKey());
   const [monthSummary, setMonthSummary] = useState({});
   const [monthPeriod, setMonthPeriod] = useState(null);
@@ -355,6 +357,19 @@ export default function TrainingPage() {
       toast("Training month did not archive.", { description: e?.response?.data?.detail || e?.message || "No useful error returned." });
     } finally {
       setBusy(false);
+    }
+  };
+
+  const loadArchiveDetail = async (archive) => {
+    const key = archive.month || archive.id;
+    if (!key || archiveDetails[key]?.entries) return;
+    setArchiveDetails((prev) => ({ ...prev, [key]: { ...(prev[key] || archive), loading: true } }));
+    try {
+      const res = await getTrainingMonthArchive(key);
+      setArchiveDetails((prev) => ({ ...prev, [key]: { ...(res.archive || archive), loading: false } }));
+    } catch (e) {
+      setArchiveDetails((prev) => ({ ...prev, [key]: { ...(prev[key] || archive), loading: false, error: true } }));
+      toast("Saved month did not open.", { description: e?.response?.data?.detail || "" });
     }
   };
 
@@ -613,10 +628,12 @@ export default function TrainingPage() {
         )}
         <div className="space-y-3">
           {archives.map((archive) => {
+            const key = archive.month || archive.id;
+            const fullArchive = archiveDetails[key] || archive;
             const summary = archive.summary || {};
-            const archiveEntries = archive.entries || [];
+            const archiveEntries = fullArchive.entries || [];
             return (
-              <details key={archive.month || archive.id} className="rounded-2xl border border-moss-700/70 bg-moss-800/35 p-4">
+              <details key={key} onToggle={(event) => event.currentTarget.open && loadArchiveDetail(archive)} className="rounded-2xl border border-moss-700/70 bg-moss-800/35 p-4">
                 <summary className="cursor-pointer list-none">
                   <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
                     <div>
@@ -643,7 +660,8 @@ export default function TrainingPage() {
                       </span>
                     </div>
                   ))}
-                  {archiveEntries.length === 0 && <div className="text-sm text-moss-200 italic">No entries in this saved month.</div>}
+                  {archiveDetails[key]?.loading && <div className="text-sm text-moss-200 italic">Opening the expedition log.</div>}
+                  {!archiveDetails[key]?.loading && archiveEntries.length === 0 && <div className="text-sm text-moss-200 italic">No entries in this saved month.</div>}
                 </div>
               </details>
             );

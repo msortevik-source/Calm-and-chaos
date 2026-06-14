@@ -90,6 +90,7 @@ class GreetingResponse(BaseModel):
     greeting: str
     sub: str
     time_of_day: str
+    status_line: Optional[str] = None
 
 class ChatRequest(BaseModel):
     text: str
@@ -595,10 +596,7 @@ async def _read_persistent_life_store() -> Dict[str, Any]:
     try:
         doc = await db.app_state.find_one({"key": "life_store"}, {"_id": 0})
         mongo_store = (doc or {}).get("data") if doc else None
-        merged = _merge_life_stores(mongo_store, local_store)
-        if merged != (mongo_store or _empty_life_store()):
-            await _write_persistent_life_store(merged)
-        return merged
+        return _merge_life_stores(mongo_store, local_store)
     except Exception:
         logging.exception("mongo unavailable for life store read; using local fallback")
         return local_store
@@ -2031,7 +2029,17 @@ async def get_greeting():
     import random
     tod = time_of_day_now()
     pair = random.choice(GREETINGS[tod])
-    return GreetingResponse(greeting=pair[0], sub=pair[1], time_of_day=tod)
+    season = "Winter" if datetime.now(timezone.utc).month in (12, 1, 2) else "Spring" if datetime.now(timezone.utc).month in (3, 4, 5) else "Summer" if datetime.now(timezone.utc).month in (6, 7, 8) else "Autumn"
+    status_pool = [
+        f"{season} Station",
+        f"{season} Station • Quiet weather",
+        "House records awake",
+        "Ledger shelf steady",
+        "Trail records standing by",
+        "Notice board accepting escaped thoughts",
+    ]
+    day_index = datetime.now(timezone.utc).date().toordinal() % len(status_pool)
+    return GreetingResponse(greeting=pair[0], sub=pair[1], time_of_day=tod, status_line=status_pool[day_index])
 
 def _format_user_message_with_history(history, current_text: str) -> str:
     """
@@ -2307,7 +2315,7 @@ async def training_month(month: Optional[str] = None):
     }
 
 @api_router.get("/training/month/archives")
-async def training_month_archives(limit: int = 24):
+async def training_month_archives(limit: int = 24, include_entries: bool = False):
     store = _read_life_store()
     local_archives = store.get("training_archives", [])
     try:
@@ -2317,7 +2325,25 @@ async def training_month_archives(limit: int = 24):
         mongo_docs = []
     docs = _merge_docs_by_id(mongo_docs, local_archives)
     docs = sorted(docs, key=lambda x: x.get("start_date", ""), reverse=True)[:limit]
+    if not include_entries:
+        docs = [{k: v for k, v in doc.items() if k != "entries"} for doc in docs]
     return {"archives": docs}
+
+@api_router.get("/training/month/archive/{month_key}")
+async def training_month_archive_detail(month_key: str):
+    month_key = _calendar_month_key(month_key)
+    store = _read_life_store()
+    local_archives = store.get("training_archives", [])
+    try:
+        doc = await db.training_archives_v1.find_one({"month": month_key}, {"_id": 0})
+    except Exception:
+        logging.warning("mongo unavailable for training archive detail; using local fallback")
+        doc = None
+    if not doc:
+        doc = next((archive for archive in local_archives if archive.get("month") == month_key), None)
+    if not doc:
+        raise HTTPException(status_code=404, detail="training archive not found")
+    return {"archive": doc}
 
 @api_router.post("/training/month/archive")
 async def training_month_archive(req: TrainingArchiveCreate):
@@ -2371,14 +2397,11 @@ async def strava_status():
     token = await _read_strava_token()
     linked = bool(token)
     if token:
-        try:
-            await _strava_access_token()
-            token = await _read_strava_token()
+        expires_at = int(token.get("expires_at") or 0)
+        now = int(datetime.now(timezone.utc).timestamp())
+        linked = bool(token.get("refresh_token") or token.get("access_token"))
+        if expires_at and expires_at <= now + 60 and token.get("refresh_token"):
             linked = True
-        except Exception as exc:
-            logging.exception("Strava token validation failed")
-            await _record_strava_debug("status_token_invalid", {"error": str(exc)})
-            linked = False
     return {
         "configured": _strava_configured(),
         "linked": linked,
@@ -2720,7 +2743,7 @@ async def _budget_archive_doc(cycle_key: str, store: Optional[Dict[str, Any]] = 
     }
 
 @api_router.get("/budget/v1/archives")
-async def budget_v1_archives(limit: int = 24):
+async def budget_v1_archives(limit: int = 24, include_entries: bool = False):
     store = _read_life_store()
     local_archives = store.get("budget_archives", [])
     try:
@@ -2730,7 +2753,28 @@ async def budget_v1_archives(limit: int = 24):
         mongo_docs = []
     docs = _merge_docs_by_id(mongo_docs, local_archives)
     docs = sorted(docs, key=lambda x: x.get("start_date", ""), reverse=True)[:limit]
+    if not include_entries:
+        docs = [
+            {k: v for k, v in doc.items() if k not in ("spending", "checkins", "setup")}
+            for doc in docs
+        ]
     return {"archives": docs}
+
+@api_router.get("/budget/v1/archive/{cycle_key}")
+async def budget_v1_archive_detail(cycle_key: str):
+    cycle_key = _budget_cycle_key(cycle_key)
+    store = _read_life_store()
+    local_archives = store.get("budget_archives", [])
+    try:
+        doc = await db.budget_archives_v1.find_one({"cycle_key": cycle_key}, {"_id": 0})
+    except Exception:
+        logging.exception("mongo unavailable for budget archive detail; using local fallback")
+        doc = None
+    if not doc:
+        doc = next((archive for archive in local_archives if archive.get("cycle_key") == cycle_key), None)
+    if not doc:
+        raise HTTPException(status_code=404, detail="budget archive not found")
+    return {"archive": doc}
 
 @api_router.post("/budget/v1/archive")
 async def budget_v1_archive(req: BudgetArchiveCreate):
@@ -3204,9 +3248,6 @@ async def _record_calendar_debug(event: str, detail: Optional[Dict[str, Any]] = 
 async def calendar_status():
     doc = await _calendar_token_get()
     linked = bool(doc and (doc.get("refresh_token") or doc.get("access_token")))
-    if linked:
-        creds = await _get_creds()
-        linked = bool(creds)
     return {"linked": linked, "email": (doc or {}).get("email")}
 
 @api_router.get("/calendar/debug")

@@ -25,6 +25,7 @@ export const getTemplate = () => api.get("/training/template").then(r => r.data)
 export const listTraining = () => api.get("/training").then(r => r.data);
 export const getTrainingMonth = (month) => api.get(`/training/month${month ? `?month=${month}` : ""}`).then(r => r.data);
 export const listTrainingMonthArchives = () => api.get("/training/month/archives").then(r => r.data);
+export const getTrainingMonthArchive = (month) => api.get(`/training/month/archive/${month}`).then(r => r.data);
 export const archiveTrainingMonth = (payload) => api.post("/training/month/archive", payload).then(r => r.data);
 export const createTraining = (payload) => api.post("/training", payload).then(r => r.data);
 export const deleteTraining = (id) => api.delete(`/training/${id}`).then(r => r.data);
@@ -42,6 +43,7 @@ export const createSpending = (payload) => api.post("/budget/v1/spending", paylo
 export const markSpendingCheckin = (payload) => api.post("/budget/v1/checkin", payload).then(r => r.data);
 export const deleteSpending = (id) => api.delete(`/budget/v1/spending/${id}`).then(r => r.data);
 export const listBudgetArchives = () => api.get("/budget/v1/archives").then(r => r.data);
+export const getBudgetArchive = (cycle) => api.get(`/budget/v1/archive/${cycle}`).then(r => r.data);
 export const archiveBudgetCycle = (payload) => api.post("/budget/v1/archive", payload).then(r => r.data);
 
 export const listLifeUpgrades = () => api.get("/life-upgrades").then(r => r.data);
