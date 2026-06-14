@@ -73,7 +73,7 @@ export default function Shell() {
           </div>
         </header>
 
-        <main className="flex-1 pt-24 pb-28 md:pt-0 md:pb-0">
+        <main className="flex-1 pt-20 pb-28 md:pt-0 md:pb-0">
           <Outlet />
         </main>
 
