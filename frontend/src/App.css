@@ -3,3 +3,49 @@
   background-color: #13282B;
   color: #F1E8D8;
 }
+
+.app-closed {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 2rem;
+  background: #13282b;
+  color: #f1e8d8;
+}
+
+.app-closed-note {
+  width: min(100%, 34rem);
+  border-top: 1px solid rgba(212, 163, 115, 0.55);
+  padding-top: 2rem;
+}
+
+.app-closed-mark {
+  width: 3.25rem;
+  height: 3.25rem;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(212, 163, 115, 0.55);
+  border-radius: 50%;
+  color: #d4a373;
+  font-family: 'Spectral', serif;
+}
+
+.app-closed-label {
+  margin: 1.5rem 0 0.5rem;
+  color: #d4a373;
+  font-size: 0.75rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.app-closed h1 {
+  margin: 0;
+  font-size: clamp(2.25rem, 8vw, 4rem);
+  line-height: 1.05;
+}
+
+.app-closed p:last-child {
+  margin: 1rem 0 0;
+  color: #c6bba2;
+  line-height: 1.6;
+}
